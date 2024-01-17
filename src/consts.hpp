@@ -17,9 +17,10 @@ inline constexpr madrona::CountT numAgents = 2;
 inline constexpr madrona::CountT maxEntitiesPerRoom = 6;
 
 // Various world / entity size parameters
-inline constexpr float worldLength = 40.f;
-inline constexpr float worldWidth = 20.f;
+inline constexpr float worldLength = 60.f;
+inline constexpr float worldWidth = 40.f;
 inline constexpr float wallWidth = 1.f;
+inline constexpr float wallHeight = 1.f;
 inline constexpr float buttonWidth = 1.3f;
 inline constexpr float agentRadius = 1.f;
 inline constexpr float roomLength = worldLength / numRooms;

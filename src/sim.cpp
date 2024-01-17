@@ -38,7 +38,6 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<EntityType>();
 
     registry.registerSingleton<WorldReset>();
-    registry.registerSingleton<LevelState>();
 
     registry.registerArchetype<Agent>();
     registry.registerArchetype<PhysicsEntity>();
@@ -69,20 +68,7 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
 
 static inline void cleanupWorld(Engine &ctx)
 {
-    // Destroy current level entities
-    LevelState &level = ctx.singleton<LevelState>();
-    for (CountT i = 0; i < consts::numRooms; i++) {
-        Room &room = level.rooms[i];
-        for (CountT j = 0; j < consts::maxEntitiesPerRoom; j++) {
-            if (room.entities[j] != Entity::none()) {
-                ctx.destroyRenderableEntity(room.entities[j]);
-            }
-        }
-
-        ctx.destroyRenderableEntity(room.walls[0]);
-        ctx.destroyRenderableEntity(room.walls[1]);
-        ctx.destroyRenderableEntity(room.door);
-    }
+    (void)ctx;
 }
 
 static inline void initWorld(Engine &ctx)
@@ -393,35 +379,6 @@ inline void collectObservationsSystem(Engine &ctx,
                 1.f : 0.f,
         };
     }
-
-    const LevelState &level = ctx.singleton<LevelState>();
-    const Room &room = level.rooms[cur_room_idx];
-
-    for (CountT i = 0; i < consts::maxEntitiesPerRoom; i++) {
-        Entity entity = room.entities[i];
-
-        EntityObservation ob;
-        if (entity == Entity::none()) {
-            ob.polar = { 0.f, 1.f };
-            ob.encodedType = encodeType(EntityType::None);
-        } else {
-            Vector3 entity_pos = ctx.get<Position>(entity);
-            EntityType entity_type = ctx.get<EntityType>(entity);
-
-            Vector3 to_entity = entity_pos - pos;
-            ob.polar = xyToPolar(to_view.rotateVec(to_entity));
-            ob.encodedType = encodeType(entity_type);
-        }
-
-        room_ent_obs.obs[i] = ob;
-    }
-
-    Entity cur_door = room.door;
-    Vector3 door_pos = ctx.get<Position>(cur_door);
-    OpenState door_open_state = ctx.get<OpenState>(cur_door);
-
-    door_obs.polar = xyToPolar(to_view.rotateVec(door_pos - pos));
-    door_obs.isOpen = door_open_state.isOpen ? 1.f : 0.f;
 }
 
 // Launches consts::numLidarSamples per agent.
