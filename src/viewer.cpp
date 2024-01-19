@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
     // Create the viewer viewer
     viz::Viewer viewer(mgr.getRenderManager(), window.get(), {
         .numWorlds = num_worlds,
-        .simTickRate = 20,
+        .simTickRate = 60,
         .cameraMoveSpeed = camera_move_speed,
         .cameraPosition = initial_camera_position,
         .cameraRotation = initial_camera_rotation,
@@ -256,6 +256,6 @@ int main(int argc, char *argv[])
 
         mgr.step();
 
-        printObs();
+        // printObs();
     }, []() {});
 }

@@ -61,10 +61,74 @@ static void registerRigidBodyEntity(
         RigidBodyPhysicsSystem::registerEntity(ctx, e, obj_id);
 }
 
+// idx = 0 => Front
+// idx = 1 => Back
+static Goal makeGoal(Engine &ctx,
+                     uint32_t idx)
+{
+    float sign = (idx == 0) ? +1.0f : -1.0f;
+
+    Goal goal;
+
+    goal.outerBorders[0] = ctx.makeRenderableEntity<PhysicsEntity>();
+    setupRigidBodyEntity(
+        ctx,
+        goal.outerBorders[0],
+        Vector3 {
+            2.f * consts::worldWidth / 6.f,
+            sign * (consts::wallWidth / 2.f + consts::worldLength / 2.f),
+            0,
+        },
+        Quat { 1, 0, 0, 0 },
+        SimObject::Wall,
+        EntityType::Wall,
+        ResponseType::Static,
+        Diag3x3 {
+            consts::worldWidth/3.f + consts::wallWidth * 2,
+            consts::wallWidth,
+            consts::wallHeight
+        });
+
+    goal.outerBorders[1] = ctx.makeRenderableEntity<PhysicsEntity>();
+    setupRigidBodyEntity(
+        ctx,
+        goal.outerBorders[1],
+        Vector3 {
+            -2.f * consts::worldWidth / 6.f,
+            sign * (consts::wallWidth / 2.f + consts::worldLength / 2.f),
+            0,
+        },
+        Quat { 1, 0, 0, 0 },
+        SimObject::Wall,
+        EntityType::Wall,
+        ResponseType::Static,
+        Diag3x3 {
+            consts::worldWidth/3.f + consts::wallWidth * 2,
+            consts::wallWidth,
+            consts::wallHeight
+        });
+
+    return goal;
+}
+
 // Creates floor, outer walls, and agent entities.
 // All these entities persist across all episodes.
 void createPersistentEntities(Engine &ctx)
 {
+    Vector3 world_min = { -consts::worldWidth*0.5f,
+                          -consts::worldLength*0.5f,
+                          0.0f };
+
+    Vector3 world_max = { consts::worldWidth*0.5f,
+                          consts::worldLength*0.5f,
+                          0.0f };
+
+    printf("World min: %f %f %f\n",
+           world_min.x, world_min.y, world_min.z);
+
+    printf("World max: %f %f %f\n",
+           world_max.x, world_max.y, world_max.z);
+
     // Create the floor entity, just a simple static plane.
     ctx.data().floorPlane = ctx.makeRenderableEntity<PhysicsEntity>();
     setupRigidBodyEntity(
@@ -77,54 +141,13 @@ void createPersistentEntities(Engine &ctx)
         ResponseType::Static);
 
     // Create the outer wall entities
-    // Front
-    ctx.data().borders[0] = ctx.makeRenderableEntity<PhysicsEntity>();
-    setupRigidBodyEntity(
-        ctx,
-        ctx.data().borders[0],
-        Vector3 {
-            0,
-            consts::wallWidth / 2.f + consts::worldLength / 2.f,
-            0,
-        },
-        Quat { 1, 0, 0, 0 },
-        SimObject::Wall,
-        EntityType::Wall,
-        ResponseType::Static,
-        Diag3x3 {
-            consts::worldWidth + consts::wallWidth * 2,
-            consts::wallWidth,
-            consts::wallHeight
-        });
-    
-    // Behind
-    ctx.data().borders[1] = ctx.makeRenderableEntity<PhysicsEntity>();
-    setupRigidBodyEntity(
-        ctx,
-        ctx.data().borders[1],
-        Vector3 {
-            0,
-            -consts::wallWidth / 2.f - consts::worldLength / 2.f,
-            0,
-        },
-        Quat { 1, 0, 0, 0 },
-        SimObject::Wall,
-        EntityType::Wall,
-        ResponseType::Static,
-        Diag3x3 {
-            consts::worldWidth + consts::wallWidth * 2,
-            consts::wallWidth,
-            consts::wallHeight
-        });
-
     // Right
-    ctx.data().borders[2] = ctx.makeRenderableEntity<PhysicsEntity>();
+    ctx.data().arena.longBorders[0] = ctx.makeRenderableEntity<PhysicsEntity>();
     setupRigidBodyEntity(
         ctx,
-        ctx.data().borders[2],
+        ctx.data().arena.longBorders[0],
         Vector3 {
             consts::worldWidth / 2.f + consts::wallWidth / 2.f,
-            //consts::worldLength / 2.f,
             0,
             0,
         },
@@ -139,13 +162,12 @@ void createPersistentEntities(Engine &ctx)
         });
 
     // Left
-    ctx.data().borders[3] = ctx.makeRenderableEntity<PhysicsEntity>();
+    ctx.data().arena.longBorders[1] = ctx.makeRenderableEntity<PhysicsEntity>();
     setupRigidBodyEntity(
         ctx,
-        ctx.data().borders[3],
+        ctx.data().arena.longBorders[1],
         Vector3 {
             -consts::worldWidth / 2.f - consts::wallWidth / 2.f,
-            //consts::worldLength / 2.f,
             0,
             0,
         },
@@ -159,44 +181,31 @@ void createPersistentEntities(Engine &ctx)
             consts::wallHeight
         });
 
-    // Create agent entities. Note that this leaves a lot of components
-    // uninitialized, these will be set during world generation, which is
-    // called for every episode.
-    for (CountT i = 0; i < consts::numAgents; ++i) {
-        Entity agent = ctx.data().agents[i] =
-            ctx.makeRenderableEntity<Agent>();
+    ctx.data().arena.goals[0] = makeGoal(ctx, 0);
+    ctx.data().arena.goals[1] = makeGoal(ctx, 1);
 
-        // Create a render view for the agent
+    for (CountT i = 0; i < consts::numCars; ++i) {
+        Entity car = ctx.data().cars[i] =
+            ctx.makeRenderableEntity<Car>();
+
         if (ctx.data().enableRender) {
             render::RenderingSystem::attachEntityToView(ctx,
-                    agent,
+                    car,
                     100.f, 0.001f,
                     1.5f * math::up);
         }
 
-        ctx.get<Scale>(agent) = Diag3x3 { 1, 1, 1 };
-        ctx.get<ObjectID>(agent) = ObjectID { (int32_t)SimObject::Agent };
-        ctx.get<ResponseType>(agent) = ResponseType::Dynamic;
-        ctx.get<GrabState>(agent).constraintEntity = Entity::none();
-        ctx.get<EntityType>(agent) = EntityType::Agent;
+        ctx.get<Scale>(car) = Diag3x3 { 1, 1, 1 };
+        ctx.get<ObjectID>(car) = ObjectID { (int32_t)SimObject::Agent };
+        ctx.get<EntityType>(car) = EntityType::Agent;
     }
 
-    // Populate OtherAgents component, which maintains a reference to the
-    // other agents in the world for each agent.
-    for (CountT i = 0; i < consts::numAgents; i++) {
-        Entity cur_agent = ctx.data().agents[i];
+    Entity ball = ctx.data().ball =
+        ctx.makeRenderableEntity<Ball>();
 
-        OtherAgents &other_agents = ctx.get<OtherAgents>(cur_agent);
-        CountT out_idx = 0;
-        for (CountT j = 0; j < consts::numAgents; j++) {
-            if (i == j) {
-                continue;
-            }
-
-            Entity other_agent = ctx.data().agents[j];
-            other_agents.e[out_idx++] = other_agent;
-        }
-    }
+    ctx.get<Scale>(ball) = Diag3x3 { 1, 1, 1 };
+    ctx.get<ObjectID>(ball) = ObjectID { (int32_t)SimObject::Sphere };
+    ctx.get<EntityType>(ball) = EntityType::Ball;
 }
 
 // Although agents and walls persist between episodes, we still need to
@@ -206,14 +215,18 @@ static void resetPersistentEntities(Engine &ctx)
 {
     registerRigidBodyEntity(ctx, ctx.data().floorPlane, SimObject::Plane);
 
-    for (CountT i = 0; i < 4; i++) {
-        Entity wall_entity = ctx.data().borders[i];
-        registerRigidBodyEntity(ctx, wall_entity, SimObject::Wall);
+    Arena &arena = ctx.data().arena;
+
+    for (CountT i = 0; i < 2; i++) {
+        registerRigidBodyEntity(ctx, arena.longBorders[i], SimObject::Wall);
+
+        registerRigidBodyEntity(ctx, arena.goals[i].outerBorders[0], SimObject::Wall);
+        registerRigidBodyEntity(ctx, arena.goals[i].outerBorders[1], SimObject::Wall);
     }
 
-    for (CountT i = 0; i < consts::numAgents; i++) {
-        Entity agent_entity = ctx.data().agents[i];
-        registerRigidBodyEntity(ctx, agent_entity, SimObject::Agent);
+    for (CountT i = 0; i < consts::numCars; i++) {
+        Entity car_entity = ctx.data().cars[i];
+        // registerRigidBodyEntity(ctx, car_entity, SimObject::Agent);
 
         // Place the agents near the starting wall
         Vector3 pos { 0.f, 0.f, 0.f };
@@ -235,32 +248,31 @@ static void resetPersistentEntities(Engine &ctx)
                 math::up);
         }
 
-        ctx.get<Position>(agent_entity) = pos;
-        ctx.get<Rotation>(agent_entity) = rot;
+        ctx.get<Position>(car_entity) = pos;
+        ctx.get<Rotation>(car_entity) = rot;
 
-        auto &grab_state = ctx.get<GrabState>(agent_entity);
-        if (grab_state.constraintEntity != Entity::none()) {
-            ctx.destroyEntity(grab_state.constraintEntity);
-            grab_state.constraintEntity = Entity::none();
-        }
-
-        ctx.get<Progress>(agent_entity).maxY = pos.y;
-
-        ctx.get<Velocity>(agent_entity) = {
+        ctx.get<Velocity>(car_entity) = {
             Vector3::zero(),
             Vector3::zero(),
         };
-        ctx.get<ExternalForce>(agent_entity) = Vector3::zero();
-        ctx.get<ExternalTorque>(agent_entity) = Vector3::zero();
-        ctx.get<Action>(agent_entity) = Action {
+        ctx.get<Action>(car_entity) = Action {
             .moveAmount = 0,
             .moveAngle = 0,
-            .rotate = consts::numTurnBuckets / 2,
-            .grab = 0,
+            .rotate = consts::numTurnBuckets / 2
         };
 
-        ctx.get<StepsRemaining>(agent_entity).t = consts::episodeLen;
+        ctx.get<StepsRemaining>(car_entity).t = consts::episodeLen;
     }
+
+    Entity ball_entity = ctx.data().ball;
+
+    ctx.get<Position>(ball_entity) = Vector3{ 0.f, 0.f, 1.f };
+    ctx.get<Rotation>(ball_entity) = 
+        Quat::angleAxis(0.0f, Vector3{0.f, 0.f, 1.f});
+    ctx.get<Velocity>(ball_entity) = {
+        Vector3::zero(),
+        Vector3::zero()
+    };
 }
 
 // Randomly generate a new world for a training episode

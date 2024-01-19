@@ -37,7 +37,6 @@ struct Action {
     int32_t moveAmount; // [0, 3]
     int32_t moveAngle; // [0, 7]
     int32_t rotate; // [-2, 2]
-    int32_t grab; // 0 = do nothing, 1 = grab / release
 };
 
 // Per-agent reward
@@ -154,6 +153,7 @@ enum class EntityType : uint32_t {
     Wall,
     Agent,
     Door,
+    Ball,
     NumTypes,
 };
 
@@ -175,30 +175,47 @@ struct ButtonState {
     bool isPressed;
 };
 
-#if 0
-// Room itself is not a component but is used by the singleton
-// component "LevelState" (below) to represent the state of the full level
-struct Room {
-    // These are entities the agent will interact with
-    Entity entities[consts::maxEntitiesPerRoom];
-
-    // The walls that separate this room from the next
-    Entity walls[2];
-
-    // The door the agents need to figure out how to lower
-    Entity door;
+// Encapsulates goal cage
+struct Goal {
+    // Left, back, right walls
+    Entity outerBorders[2];
+    
+    madrona::math::Vector3 minBound;
+    madrona::math::Vector3 maxBound;
 };
-#endif
 
-#if 0
-// A singleton component storing the state of all the rooms in the current
-// randomly generated level
-struct LevelState {
-    Room rooms[consts::numRooms];
+struct Arena {
+    Goal goals[2];
+
+    // Across the length of the arena
+    Entity longBorders[2];
 };
-#endif
 
 /* ECS Archetypes for the game */
+
+struct Ball : public madrona::Archetype<
+    Position,
+    Rotation,
+    Scale,
+    Velocity,
+    ObjectID,
+    EntityType,
+    madrona::render::Renderable
+> {};
+
+struct Car : public madrona::Archetype<
+    Position,
+    Rotation,
+    Scale,
+    Velocity,
+    ObjectID,
+    Action,
+    EntityType,
+    StepsRemaining,
+    Done,
+    madrona::render::RenderCamera,
+    madrona::render::Renderable
+> {};
 
 // There are 2 Agents in the environment trying to get to the destination
 struct Agent : public madrona::Archetype<
@@ -276,7 +293,8 @@ struct ButtonEntity : public madrona::Archetype<
     ObjectID,
     ButtonState,
     EntityType,
-    madrona::render::Renderable
+    madrona::render::Renderable,
+    Done
 > {};
 
 // Generic archetype for entities that need physics but don't have custom

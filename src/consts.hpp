@@ -5,6 +5,10 @@
 namespace madEscape {
 
 namespace consts {
+inline constexpr madrona::CountT numCars = 2;
+
+
+
 // Each random world is composed of a fixed number of rooms that the agents
 // must solve in order to maximize their reward.
 inline constexpr madrona::CountT numRooms = 3;
@@ -43,7 +47,7 @@ inline constexpr madrona::CountT numTurnBuckets = 5;
 inline constexpr madrona::CountT numLidarSamples = 30;
 
 // Time (seconds) per step
-inline constexpr float deltaT = 0.04f;
+inline constexpr float deltaT = 0.016f;
 
 // Speed at which doors raise and lower
 inline constexpr float doorSpeed = 30.f;
