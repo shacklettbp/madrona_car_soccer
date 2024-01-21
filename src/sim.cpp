@@ -126,6 +126,7 @@ inline void resetSystem(Engine &ctx, WorldReset &reset)
 // Translates discrete actions from the Action component to forces
 // used by the physics simulation.
 inline void carMovementSystem(Engine &engine,
+                              Entity e,
                               Action &action, 
                               Position &pos,
                               Rotation &rot, 
@@ -177,7 +178,7 @@ inline void carMovementSystem(Engine &engine,
     if (intersect) {
         static uint64_t i = 0;
         i++;
-        printf("Intersection!!! %llu\n", i);
+        // printf("Intersection!!! %llu\n", i);
 
         // Take the difference of the sphere's center and the car's
         // center at impact.
@@ -195,6 +196,46 @@ inline void carMovementSystem(Engine &engine,
 
 
     pos += dx;
+
+
+    auto create_obb = [](Position pos, Rotation rot) -> OBB {
+        static Vector3 car_ground_verts[4] = {
+            Vector3{ -consts::agentDimensions.x, consts::agentDimensions.y, 0.f },
+            Vector3{ consts::agentDimensions.x, consts::agentDimensions.y, 0.f },
+            Vector3{ consts::agentDimensions.x, -consts::agentDimensions.y, 0.f },
+            Vector3{ -consts::agentDimensions.x, -consts::agentDimensions.y, 0.f }
+        };
+
+        OBB obb = {};
+
+        for (int i = 0; i < 4; ++i) {
+            auto v = rot.rotateVec(car_ground_verts[i]) + 
+                     Vector3{pos.x, pos.y, 0.f};
+            obb.verts[i] = { v.x, v.y };
+        }
+
+        return obb;
+    };
+
+
+    OBB e_obb = create_obb(pos, rot);
+
+    // Check the other cars for collisions
+    for (int i = 0; i < 2; ++i) {
+        Entity car = engine.data().cars[i];
+
+        if (car != e) {
+            // Check for collision
+            OBB car_obb = create_obb(engine.get<Position>(car),
+                                     engine.get<Rotation>(car));
+
+            if (intersectMovingOBBs2D(e_obb, car_obb)) {
+                static uint64_t dummy = 0;
+                ++dummy;
+                printf("Intersection of cars!!! %llu\n", dummy);
+            }
+        }
+    }
 }
 
 inline void ballMovementSystem(Engine &engine,
@@ -250,6 +291,7 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
     // Turn policy actions into movement
     auto move_sys = builder.addToGraph<ParallelForNode<Engine,
         carMovementSystem,
+            Entity,
             Action,
             Position,
             Rotation,
