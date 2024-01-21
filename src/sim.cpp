@@ -1,6 +1,7 @@
 #include <madrona/mw_gpu_entry.hpp>
 
 #include "sim.hpp"
+#include "physics.hpp"
 #include "level_gen.hpp"
 
 using namespace madrona;
@@ -36,6 +37,8 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<Lidar>();
     registry.registerComponent<StepsRemaining>();
     registry.registerComponent<EntityType>();
+    registry.registerComponent<BallGoalState>();
+    registry.registerComponent<DynamicEntityType>();
 
     registry.registerSingleton<WorldReset>();
 
@@ -122,17 +125,71 @@ inline void resetSystem(Engine &ctx, WorldReset &reset)
 
 // Translates discrete actions from the Action component to forces
 // used by the physics simulation.
-inline void movementSystem(Context &engine,
-                           Action &action, 
-                           Position &pos,
-                           Rotation &rot, 
-                           Velocity &vel)
+inline void carMovementSystem(Engine &engine,
+                              Action &action, 
+                              Position &pos,
+                              Rotation &rot, 
+                              Velocity &vel)
 {
+    constexpr float move_angle_per_bucket =
+        2.f * math::pi / float(consts::numTurnBuckets);
+    float move_angle = float(action.rotate-2) * move_angle_per_bucket *
+                       consts::deltaT;
+    Quat rot_diff = Quat::angleAxis(move_angle, { 0.0f, 0.0f, 1.0f });
+
+    rot *= rot_diff;
+
     Vector3 fwd = rot.rotateVec({ 0.f, 1.f, 0.f });
 
+    // Calculate the uninterupted displacement vector, and velocity.
     if (action.moveAmount > 0) {
-        pos += fwd;
+        vel.linear += consts::carAcceleration * fwd * consts::deltaT;
     }
+
+    // Hack friction
+    vel.linear *= 0.95f;
+    
+    // This is the uninterrupted displacement vector given no collisions.
+    Vector3 dx = vel.linear * consts::deltaT;
+
+    
+
+    // First check collision with the ball
+    Entity ball_entity = engine.data().ball;
+    Position ball_pos = engine.get<Position>(ball_entity);
+    Velocity ball_vel = engine.get<Velocity>(ball_entity);
+
+
+    Vector3 ball_dx = ball_vel.linear * consts::deltaT;
+    Sphere ball_sphere = { Vector3::zero(), consts::ballRadius };
+
+    Vector3 car_ball_rel = rot.inv().rotateVec(pos - ball_pos);
+    AABB car_aabb = { car_ball_rel - consts::agentDimensions,
+                      car_ball_rel + consts::agentDimensions };
+
+    float out_t;
+    int intersect = intersectMovingSphereAABB(
+        ball_sphere, rot.inv().rotateVec(ball_dx), 
+        car_aabb, out_t);
+
+    if (intersect) {
+        static uint64_t i = 0;
+        i++;
+        printf("Intersection!!! %llu\n", i);
+    } else {
+
+    }
+
+
+    // For now, we just naively loop through the other agents, and then 
+    // the ball to determine where collisions have happened.
+    //
+    // (TODO) Add some very simple space partitioning system to make this
+    // faster when there are multiple cars.
+    
+
+
+    pos += dx;
 }
 
 // Keep track of the number of steps remaining in the episode and
@@ -177,7 +234,7 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
 {
     // Turn policy actions into movement
     auto move_sys = builder.addToGraph<ParallelForNode<Engine,
-        movementSystem,
+        carMovementSystem,
             Action,
             Position,
             Rotation,

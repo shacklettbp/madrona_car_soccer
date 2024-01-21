@@ -1,5 +1,6 @@
 #pragma once
 
+#include "madrona/math.hpp"
 #include <madrona/types.hpp>
 
 namespace madEscape {
@@ -54,6 +55,14 @@ inline constexpr float doorSpeed = 30.f;
 
 // Number of physics substeps
 inline constexpr madrona::CountT numPhysicsSubsteps = 4.f;
+
+inline constexpr float carAcceleration = 80.f;
+
+inline constexpr float ballRadius = 0.7f;
+
+// Half width, length, height
+inline constexpr madrona::math::Vector3 agentDimensions
+    { 0.8f, 1.7f, 0.7f };
 
 }
 

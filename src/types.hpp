@@ -157,6 +157,13 @@ enum class EntityType : uint32_t {
     NumTypes,
 };
 
+enum class DynamicEntityType : uint32_t {
+    None,
+    Car,
+    Ball,
+    NumTypes,
+};
+
 // A per-door component that tracks whether or not the door should be open.
 struct OpenState {
     bool isOpen;
@@ -193,6 +200,13 @@ struct Arena {
 
 /* ECS Archetypes for the game */
 
+enum class BallGoalState {
+    None,
+    InGoal,
+    NotInGoal,
+    NumStates,
+};
+
 struct Ball : public madrona::Archetype<
     Position,
     Rotation,
@@ -200,6 +214,8 @@ struct Ball : public madrona::Archetype<
     Velocity,
     ObjectID,
     EntityType,
+    BallGoalState,
+    DynamicEntityType,
     madrona::render::Renderable
 > {};
 
@@ -213,6 +229,7 @@ struct Car : public madrona::Archetype<
     EntityType,
     StepsRemaining,
     Done,
+    DynamicEntityType,
     madrona::render::RenderCamera,
     madrona::render::Renderable
 > {};

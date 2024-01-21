@@ -1,4 +1,5 @@
 #include "level_gen.hpp"
+#include "consts.hpp"
 
 namespace madEscape {
 
@@ -195,17 +196,21 @@ void createPersistentEntities(Engine &ctx)
                     1.5f * math::up);
         }
 
-        ctx.get<Scale>(car) = Diag3x3 { 1, 1, 1 };
+        ctx.get<Scale>(car) = Diag3x3::fromVec(consts::agentDimensions);
         ctx.get<ObjectID>(car) = ObjectID { (int32_t)SimObject::Agent };
         ctx.get<EntityType>(car) = EntityType::Agent;
+        ctx.get<DynamicEntityType>(car) = DynamicEntityType::Car;
     }
 
     Entity ball = ctx.data().ball =
         ctx.makeRenderableEntity<Ball>();
 
-    ctx.get<Scale>(ball) = Diag3x3 { 1, 1, 1 };
+    float ball_rad = consts::ballRadius;
+    ctx.get<Scale>(ball) = Diag3x3 { ball_rad, ball_rad, ball_rad };
     ctx.get<ObjectID>(ball) = ObjectID { (int32_t)SimObject::Sphere };
     ctx.get<EntityType>(ball) = EntityType::Ball;
+    ctx.get<DynamicEntityType>(ball) = DynamicEntityType::Ball;
+    ctx.get<BallGoalState>(ball) = BallGoalState::NotInGoal;
 }
 
 // Although agents and walls persist between episodes, we still need to
@@ -229,7 +234,7 @@ static void resetPersistentEntities(Engine &ctx)
         // registerRigidBodyEntity(ctx, car_entity, SimObject::Agent);
 
         // Place the agents near the starting wall
-        Vector3 pos { 0.f, 0.f, 0.f };
+        Vector3 pos { 0.f, 0.f, consts::agentDimensions.z };
         Quat rot{};
 
         if (i % 2 == 0) {
@@ -266,7 +271,7 @@ static void resetPersistentEntities(Engine &ctx)
 
     Entity ball_entity = ctx.data().ball;
 
-    ctx.get<Position>(ball_entity) = Vector3{ 0.f, 0.f, 1.f };
+    ctx.get<Position>(ball_entity) = Vector3{ 0.f, 0.f, consts::ballRadius };
     ctx.get<Rotation>(ball_entity) = 
         Quat::angleAxis(0.0f, Vector3{0.f, 0.f, 1.f});
     ctx.get<Velocity>(ball_entity) = {

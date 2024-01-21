@@ -1,6 +1,7 @@
 set(SIMULATOR_SRCS
     types.hpp
     sim.hpp sim.inl sim.cpp
+    physics.hpp physics.cpp
     level_gen.hpp level_gen.cpp
 )
 
