@@ -167,19 +167,24 @@ inline void carMovementSystem(Engine &engine,
     AABB car_aabb = { car_ball_rel - consts::agentDimensions,
                       car_ball_rel + consts::agentDimensions };
 
+    Vector3 rel_dx = rot.inv().rotateVec(dx - ball_dx);
+
     float out_t;
     int intersect = intersectMovingSphereAABB(
-        ball_sphere, rot.inv().rotateVec(ball_dx), 
+        ball_sphere, rel_dx, 
         car_aabb, out_t);
 
     if (intersect) {
         static uint64_t i = 0;
         i++;
         printf("Intersection!!! %llu\n", i);
-    } else {
 
+        // Take the difference of the sphere's center and the car's
+        // center at impact.
+        Vector3 diff = rot.rotateVec(out_t * rel_dx - car_ball_rel);
+
+        engine.get<Velocity>(ball_entity).linear = diff * 10.0f;
     }
-
 
     // For now, we just naively loop through the other agents, and then 
     // the ball to determine where collisions have happened.
@@ -190,6 +195,16 @@ inline void carMovementSystem(Engine &engine,
 
 
     pos += dx;
+}
+
+inline void ballMovementSystem(Engine &engine,
+                               Position &pos,
+                               Velocity &vel,
+                               BallGoalState &ball_goal_state)
+{
+    pos += vel.linear * consts::deltaT;
+
+    vel.linear *= 0.95f;
 }
 
 // Keep track of the number of steps remaining in the episode and
@@ -241,12 +256,19 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             Velocity
         >>({});
 
+    auto ball_move_sys = builder.addToGraph<ParallelForNode<Engine,
+        ballMovementSystem,
+            Position,
+            Velocity,
+            BallGoalState
+        >>({move_sys});
+
     // Check if the episode is over
     auto done_sys = builder.addToGraph<ParallelForNode<Engine,
         stepTrackerSystem,
             StepsRemaining,
             Done
-        >>({move_sys});
+        >>({ball_move_sys});
 
     // Conditionally reset the world if the episode is over
     auto reset_sys = builder.addToGraph<ParallelForNode<Engine,

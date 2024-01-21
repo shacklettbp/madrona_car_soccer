@@ -25,11 +25,9 @@ int intersectMovingSphereAABB(Sphere s,
                                           Diag3x3::fromVec(dx).inv(),
                                           0.0f, 1.0f, t_out);
 
-    if (intersected) {
-        return 1;
-    } else {
-        return 0;
-    }
+    t = t_out;
+
+    return (int)intersected;
 }
     
 }
