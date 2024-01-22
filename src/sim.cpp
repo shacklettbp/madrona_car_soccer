@@ -176,10 +176,6 @@ inline void carMovementSystem(Engine &engine,
         car_aabb, out_t);
 
     if (intersect) {
-        static uint64_t i = 0;
-        i++;
-        // printf("Intersection!!! %llu\n", i);
-
         // Take the difference of the sphere's center and the car's
         // center at impact.
         Vector3 diff = rot.rotateVec(out_t * rel_dx - car_ball_rel);
@@ -232,16 +228,15 @@ inline void carMovementSystem(Engine &engine,
             Vector2 min_overlap_axis;
             if (intersectMovingOBBs2D(e_obb, car_obb,
                                       min_overlap, min_overlap_axis)) {
-#if 0
-                static uint64_t dummy = 0;
-                ++dummy;
-                printf("Intersection of cars!!! %llu\n", dummy);
-#endif
 
-                pos -= 0.5f * min_overlap * 
+                Vector3 diff = 0.5f * min_overlap * 
                     Vector3{min_overlap_axis.x, min_overlap_axis.y, 0.f};
-                engine.get<Position>(car) += 0.5f * min_overlap * 
-                    Vector3{min_overlap_axis.x, min_overlap_axis.y, 0.f};
+
+                pos -= diff;
+                vel.linear -= diff / consts::deltaT;
+
+                engine.get<Position>(car) += diff;            
+                engine.get<Velocity>(car).linear += diff / consts::deltaT;
             }
         }
     }
@@ -252,6 +247,9 @@ inline void ballMovementSystem(Engine &engine,
                                Velocity &vel,
                                BallGoalState &ball_goal_state)
 {
+    (void)engine;
+    (void)ball_goal_state;
+
     pos += vel.linear * consts::deltaT;
 
     vel.linear *= 0.95f;
