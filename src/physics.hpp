@@ -22,6 +22,8 @@ struct OBB {
 // We aren't doing precise collision detection so we just care to see whether
 // a collision has happened at all.
 int intersectMovingOBBs2D(const OBB &a,
-                          const OBB &b);
+                          const OBB &b,
+                          float &min_overlap,
+                          madrona::math::Vector2 &min_overlap_axis);
 
 }

@@ -194,7 +194,6 @@ inline void carMovementSystem(Engine &engine,
     // faster when there are multiple cars.
     
 
-
     pos += dx;
 
 
@@ -224,15 +223,25 @@ inline void carMovementSystem(Engine &engine,
     for (int i = 0; i < 2; ++i) {
         Entity car = engine.data().cars[i];
 
-        if (car != e) {
+        if (car != e && car.id < e.id) {
             // Check for collision
             OBB car_obb = create_obb(engine.get<Position>(car),
                                      engine.get<Rotation>(car));
 
-            if (intersectMovingOBBs2D(e_obb, car_obb)) {
+            float min_overlap;
+            Vector2 min_overlap_axis;
+            if (intersectMovingOBBs2D(e_obb, car_obb,
+                                      min_overlap, min_overlap_axis)) {
+#if 0
                 static uint64_t dummy = 0;
                 ++dummy;
                 printf("Intersection of cars!!! %llu\n", dummy);
+#endif
+
+                pos -= 0.5f * min_overlap * 
+                    Vector3{min_overlap_axis.x, min_overlap_axis.y, 0.f};
+                engine.get<Position>(car) += 0.5f * min_overlap * 
+                    Vector3{min_overlap_axis.x, min_overlap_axis.y, 0.f};
             }
         }
     }

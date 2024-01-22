@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <stdio.h>
+#include <assert.h>
 #include "physics.hpp"
 
 namespace madEscape {
@@ -32,11 +33,17 @@ int intersectMovingSphereAABB(Sphere s,
 }
 
 int intersectMovingOBBs2D(const OBB &a,
-                          const OBB &b)
+                          const OBB &b,
+                          float &min_overlap,
+                          Vector2 &min_overlap_axis)
 {
     // Simply loop through the normals of a, then b to find a separating axis.
     // Very stupid.
-    auto find_sat = [](const OBB &a, const OBB &b) {
+    float minimum_overlap = FLT_MAX;
+    Vector2 minimum_overlap_axis = {};
+
+    auto find_sat = [&minimum_overlap, &minimum_overlap_axis]
+                    (const OBB &a, const OBB &b, int idx) {
         static uint32_t min_max_lut[4][2] = {
             { 3, 0 },
             { 0, 1 },
@@ -70,16 +77,42 @@ int intersectMovingOBBs2D(const OBB &a,
                 // Found a separating axis
                 return 1;
             }
+
+            float overlap = 0.f;
+
+            if (a_max >= b_min) {
+                overlap = a_max - b_min;
+            } else if (a_min >= b_max) {
+                overlap = a_min - b_max;
+            } else {
+                assert(false);
+            }
+
+            if (overlap < minimum_overlap) {
+                minimum_overlap = overlap;
+                minimum_overlap_axis = (idx == 1) ? -1.f*a_norm : a_norm;
+            }
+
+#if 0
+            overlap = std::abs(b_max - a_min);
+            if (overlap < minimum_overlap) {
+                minimum_overlap = overlap;
+                minimum_overlap_axis = (idx == 1) ? -1.f*a_norm : a_norm;
+            }
+#endif
         }
 
         return 0;
     };
 
-    if (find_sat(a, b)) {
+    if (find_sat(a, b, 0)) {
         return 0;
-    } else if (find_sat(b, a)) {
+    } else if (find_sat(b, a, 1)) {
         return 0;
     }
+
+    min_overlap = minimum_overlap;
+    min_overlap_axis = minimum_overlap_axis;
 
     return 1;
 }
