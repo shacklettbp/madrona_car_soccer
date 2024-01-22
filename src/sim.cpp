@@ -240,6 +240,19 @@ inline void carMovementSystem(Engine &engine,
             }
         }
     }
+
+    printf("%f %f %f\n", pos.x, pos.y, pos.z);
+
+    // Check the walls for collisions
+    for (int i = 0; i < 4; ++i) {
+        auto &plane = engine.data().arena.wallPlanes[i];
+
+        float overlap;
+        if (intersectMovingOBBWall(e_obb, plane, overlap)) {
+            printf("Intersection!\n");
+            pos -= overlap * Vector3{plane.normal.x, plane.normal.y, 0.0f};
+        }
+    }
 }
 
 inline void ballMovementSystem(Engine &engine,

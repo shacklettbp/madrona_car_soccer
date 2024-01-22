@@ -92,14 +92,6 @@ int intersectMovingOBBs2D(const OBB &a,
                 minimum_overlap = overlap;
                 minimum_overlap_axis = (idx == 1) ? -1.f*a_norm : a_norm;
             }
-
-#if 0
-            overlap = std::abs(b_max - a_min);
-            if (overlap < minimum_overlap) {
-                minimum_overlap = overlap;
-                minimum_overlap_axis = (idx == 1) ? -1.f*a_norm : a_norm;
-            }
-#endif
         }
 
         return 0;
@@ -115,6 +107,34 @@ int intersectMovingOBBs2D(const OBB &a,
     min_overlap_axis = minimum_overlap_axis;
 
     return 1;
+}
+
+int intersectMovingOBBWall(const OBB &a,
+                           const WallPlane &plane,
+                           float &min_overlap)
+{
+    // Simply loop through the normals of a, then b to find a separating axis.
+    // Very stupid.
+    float minimum_overlap = FLT_MAX;
+
+    for (int a_vert_idx = 0; a_vert_idx < 4; ++a_vert_idx) {
+        Vector2 a_vert = a.verts[a_vert_idx];
+
+        Vector2 diff = a_vert - plane.point;
+        float dp = diff.dot(plane.normal);
+
+        if (dp < minimum_overlap) {
+            minimum_overlap = dp;
+        }
+    }
+
+    min_overlap = minimum_overlap;
+
+    if (minimum_overlap < 0.0f) {
+        return 1;
+    } else {
+        return 0;
+    }
 }
     
 }

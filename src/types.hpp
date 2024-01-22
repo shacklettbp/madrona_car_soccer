@@ -7,6 +7,7 @@
 #include <madrona/render/ecs.hpp>
 
 #include "consts.hpp"
+#include "physics.hpp"
 
 namespace madEscape {
 
@@ -196,6 +197,8 @@ struct Arena {
 
     // Across the length of the arena
     Entity longBorders[2];
+
+    WallPlane wallPlanes[4];
 };
 
 /* ECS Archetypes for the game */
