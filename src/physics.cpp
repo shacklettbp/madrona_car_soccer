@@ -143,6 +143,24 @@ int intersectMovingSphereWall(Sphere s,
                               float &t_out,
                               Vector3 &p_out)
 {
+    (void)p_out;
+
+    Vector2 center_2d = { s.center.x, s.center.y };
+    Vector2 normal_2d = { plane.normal.x, plane.normal.y };
+    Vector2 dx_2d = { dx.x, dx.y };
+
+    float t = (s.radius + plane.point.dot(normal_2d) - 
+                          center_2d.dot(normal_2d)) /
+              dx_2d.dot(plane.normal);
+
+    if (t >= 0.0f && t <= 1.0f) {
+        t_out = t * 0.9f;
+        return 1;
+    } else {
+        return 0;
+    }
+
+#if 0
     float dist = plane.normal.dot({s.center.x, s.center.y}) -
                  plane.normal.dot(plane.point);
 
@@ -167,6 +185,7 @@ int intersectMovingSphereWall(Sphere s,
             }
         }
     }
+#endif
 }
     
 }

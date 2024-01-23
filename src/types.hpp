@@ -145,6 +145,11 @@ struct GrabState {
     Entity constraintEntity;
 };
 
+// Not an actual momentum
+struct Momentum {
+    float rho;
+};
+
 // This enum is used to track the type of each entity for the purposes of
 // classifying the objects hit by each lidar sample.
 enum class EntityType : uint32_t {

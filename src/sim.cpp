@@ -262,21 +262,22 @@ inline void ballMovementSystem(Engine &engine,
 
     Vector3 dx = vel.linear * consts::deltaT;
 
-    bool intersection = 0;
-
     for (int i = 0; i < 4; ++i) {
+
         WallPlane &plane = engine.data().arena.wallPlanes[i];
 
         float t;
         Vector3 p;
         if (intersectMovingSphereWall(Sphere{ pos, consts::ballRadius },
                 dx, plane, t, p)) {
+            dx = t * dx;
 
-            intersectMovingSphereWall(
-                Sphere{ pos, consts::ballRadius },
-                dx, plane, t, p);
+            printf("Ball intersection with wall\n");
 
-            dx = p - pos;
+            vel.linear *= -1.f;
+
+            // vel.linear = reflect(vel.linear, 
+                    // Vector3{plane.normal.x, plane.normal.y, 0.f});
         }
     }
 
