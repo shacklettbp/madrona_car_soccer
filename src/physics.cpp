@@ -210,5 +210,38 @@ int intersectSphereWall(Sphere s,
         return 0;
     }
 }
+
+int intersectSphereWallSeg(Sphere s,
+                           const WallSegment &seg,
+                           float &min_overlap)
+{
+    Vector2 center_2d = { s.center.x, s.center.y };
+    Vector2 normal_2d = { seg.normal.x, seg.normal.y };
+
+    float dist = center_2d.dot(normal_2d) - seg.borders[0].dot(normal_2d) -
+                 s.radius;
+
+    if (dist < 0.f) {
+        // If we are through the wall, check that we are within the bounds of
+        // the boundaries
+        Vector2 border_dir0 = seg.borders[1] - seg.borders[0];
+        Vector2 border_dir1 = seg.borders[0] - seg.borders[1];
+
+        Vector2 diff0 = center_2d - seg.borders[0];
+        Vector2 diff1 = center_2d - seg.borders[1];
+
+        if (diff0.dot(border_dir0) >= 0.f && diff1.dot(border_dir1) >= 0.f) {
+            // There was a collision within the boundaries
+            min_overlap = -dist;
+            printf("Passed full goal post intersection test\n");
+            return 1;
+        } else {
+            printf("Failed boundary test\n");
+            return 0;
+        }
+    } else {
+        return 0;
+    }
+}
     
 }

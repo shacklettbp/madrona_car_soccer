@@ -341,4 +341,9 @@ struct PhysicsEntity : public madrona::Archetype<
     madrona::render::Renderable
 > {};
 
+struct Team {
+    madrona::math::Vector3 color;
+    Entity players[consts::numCarsPerTeam];
+};
+
 }

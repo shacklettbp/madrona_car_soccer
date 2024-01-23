@@ -253,18 +253,57 @@ inline void carMovementSystem(Engine &engine,
     }
 }
 
+inline void checkBallGoalPosts(Engine &engine,
+                               Position &pos,
+                               Velocity &vel,
+                               BallGoalState &ball_gs,
+                               int goal_idx)
+{
+    (void)ball_gs;
+
+    float sign = (goal_idx == 0) ? +1.f : -1.f;
+
+    Goal &goal = engine.data().arena.goals[goal_idx];
+
+    for (int i = 0; i < 2; ++i) {
+        Vector2 post0_pos = Vector2::fromVector3(
+                engine.get<Position>(goal.outerBorders[i]));
+        Scale post0_scale_3d = engine.get<Scale>(goal.outerBorders[i]);
+
+        Vector2 post0_scale = { post0_scale_3d.d0, post0_scale_3d.d1 };
+
+        WallSegment s0 = {
+            { post0_pos + Vector2{ post0_scale.x/2.f, 0.f },
+              post0_pos - Vector2{ post0_scale.x/2.f, 0.f }},
+            Vector2{ 0.f, -sign }
+        };
+
+        float min_overlap;
+        if (intersectSphereWallSeg(Sphere{ pos, consts::ballRadius },
+                    s0, min_overlap)) {
+            printf("Ball intersected goal post!\n");
+
+            Vector3 normal_3d = Vector3{s0.normal.x, s0.normal.y, 0.f};
+            pos += normal_3d * min_overlap;
+
+            vel.linear = reflect(vel.linear, normal_3d);
+        }
+    }
+}
+
 inline void ballMovementSystem(Engine &engine,
                                Position &pos,
                                Velocity &vel,
-                               BallGoalState &ball_goal_state)
+                               BallGoalState &ball_gs)
 {
     (void)engine;
-    (void)ball_goal_state;
+    (void)ball_gs;
 
     Vector3 dx = vel.linear * consts::deltaT;
     pos += dx;
 
-    for (int i = 0; i < 4; ++i) {
+    // Check collision against the long walls
+    for (int i = 0; i < 2; ++i) {
         WallPlane &plane = engine.data().arena.wallPlanes[i];
 
         float min_overlap;
@@ -277,6 +316,11 @@ inline void ballMovementSystem(Engine &engine,
 
             vel.linear = reflect(vel.linear, normal_3d);
         }
+    }
+
+    // Check collision against the goal posts
+    for (int i = 0; i < 2; ++i) {
+        checkBallGoalPosts(engine, pos, vel, ball_gs, i);
     }
 
     vel.linear *= 0.95f;

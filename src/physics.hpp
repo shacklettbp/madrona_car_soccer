@@ -19,6 +19,14 @@ struct WallPlane {
     madrona::math::Vector2 normal;
 };
 
+struct WallSegment {
+    madrona::math::Vector2 borders[2];
+
+    // Just to know in which direction we consider a collision
+    // (to make things simpler for now)
+    madrona::math::Vector2 normal;
+};
+
 int intersectMovingSphereAABB(Sphere s, 
                               madrona::math::Vector3 dx,
                               madrona::math::AABB aabb,
@@ -46,6 +54,10 @@ int intersectMovingSphereWall(Sphere s,
 
 int intersectSphereWall(Sphere s,
                         const WallPlane &plane,
+                        float &min_overlap);
+
+int intersectSphereWallSeg(Sphere s,
+                        const WallSegment &seg,
                         float &min_overlap);
 
 }
