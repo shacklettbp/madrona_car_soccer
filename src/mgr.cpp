@@ -185,7 +185,8 @@ struct Manager::CUDAImpl final : Manager::Impl {
 };
 #endif
 
-static void loadRenderObjects(render::RenderManager &render_mgr)
+static void loadRenderObjects(render::RenderManager &render_mgr,
+                              Vector3 *team_colors)
 {
     std::array<std::string, (size_t)SimObject::NumObjects> render_asset_paths;
     render_asset_paths[(size_t)SimObject::Cube] =
@@ -194,7 +195,9 @@ static void loadRenderObjects(render::RenderManager &render_mgr)
         (std::filesystem::path(DATA_DIR) / "wall_render.obj").string();
     render_asset_paths[(size_t)SimObject::Door] =
         (std::filesystem::path(DATA_DIR) / "wall_render.obj").string();
-    render_asset_paths[(size_t)SimObject::Agent] =
+    render_asset_paths[(size_t)SimObject::AgentTeam0] =
+        (std::filesystem::path(DATA_DIR) / "cube_render.obj").string();
+    render_asset_paths[(size_t)SimObject::AgentTeam1] =
         (std::filesystem::path(DATA_DIR) / "cube_render.obj").string();
     render_asset_paths[(size_t)SimObject::Button] =
         (std::filesystem::path(DATA_DIR) / "cube_render.obj").string();
@@ -217,6 +220,8 @@ static void loadRenderObjects(render::RenderManager &render_mgr)
     }
 
     auto materials = std::to_array<imp::SourceMaterial>({
+        { math::Vector4::fromVector3(team_colors[0], 0.f), -1, 0.8f, 0.2f },
+        { math::Vector4::fromVector3(team_colors[1], 0.f), -1, 0.8f, 0.2f },
         { render::rgb8ToFloat(191, 108, 10), -1, 0.8f, 0.2f },
         { math::Vector4{0.4f, 0.4f, 0.4f, 0.0f}, -1, 0.8f, 0.2f,},
         { math::Vector4{1.f, 1.f, 1.f, 0.0f}, 1, 0.5f, 1.0f,},
@@ -224,15 +229,16 @@ static void loadRenderObjects(render::RenderManager &render_mgr)
         { math::Vector4{0.5f, 0.3f, 0.3f, 0.0f},  0, 0.8f, 0.2f,},
         { render::rgb8ToFloat(230, 20, 20),   -1, 0.8f, 1.0f },
         { render::rgb8ToFloat(230, 230, 20),   -1, 0.8f, 1.0f },
-        { render::rgb8ToFloat(230, 230, 230),   -1, 0.2f, 1.0f },
+        { render::rgb8ToFloat(230, 230, 230),   -1, 0.9f, 0.1f },
     });
 
     // Override materials
     render_assets->objects[(CountT)SimObject::Cube].meshes[0].materialIDX = 0;
-    render_assets->objects[(CountT)SimObject::Wall].meshes[0].materialIDX = 1;
+    render_assets->objects[(CountT)SimObject::Wall].meshes[0].materialIDX = 3;
     render_assets->objects[(CountT)SimObject::Door].meshes[0].materialIDX = 5;
 
-    render_assets->objects[(CountT)SimObject::Agent].meshes[0].materialIDX = 0;
+    render_assets->objects[(CountT)SimObject::AgentTeam0].meshes[0].materialIDX = 0;
+    render_assets->objects[(CountT)SimObject::AgentTeam1].meshes[0].materialIDX = 1;
 
 #if 0
     render_assets->objects[(CountT)SimObject::Agent].meshes[0].materialIDX = 2;
@@ -241,8 +247,8 @@ static void loadRenderObjects(render::RenderManager &render_mgr)
 #endif
 
     render_assets->objects[(CountT)SimObject::Button].meshes[0].materialIDX = 6;
-    render_assets->objects[(CountT)SimObject::Plane].meshes[0].materialIDX = 4;
-    render_assets->objects[(CountT)SimObject::Sphere].meshes[0].materialIDX = 7;
+    render_assets->objects[(CountT)SimObject::Plane].meshes[0].materialIDX = 6;
+    render_assets->objects[(CountT)SimObject::Sphere].meshes[0].materialIDX = 9;
 
     render_mgr.loadObjects(render_assets->objects, materials, {
         { (std::filesystem::path(DATA_DIR) /
@@ -265,7 +271,9 @@ static void loadPhysicsObjects(PhysicsLoader &loader)
         (std::filesystem::path(DATA_DIR) / "wall_collision.obj").string();
     asset_paths[(size_t)SimObject::Door] =
         (std::filesystem::path(DATA_DIR) / "wall_collision.obj").string();
-    asset_paths[(size_t)SimObject::Agent] =
+    asset_paths[(size_t)SimObject::AgentTeam0] =
+        (std::filesystem::path(DATA_DIR) / "agent_collision_simplified.obj").string();
+    asset_paths[(size_t)SimObject::AgentTeam1] =
         (std::filesystem::path(DATA_DIR) / "agent_collision_simplified.obj").string();
     asset_paths[(size_t)SimObject::Button] =
         (std::filesystem::path(DATA_DIR) / "cube_collision.obj").string();
@@ -332,7 +340,12 @@ static void loadPhysicsObjects(PhysicsLoader &loader)
         .muD = 0.5f,
     });
 
-    setupHull(SimObject::Agent, 1.f, {
+    setupHull(SimObject::AgentTeam0, 1.f, {
+        .muS = 0.5f,
+        .muD = 5.0f,
+    });
+
+    setupHull(SimObject::AgentTeam1, 1.f, {
         .muS = 0.5f,
         .muD = 5.0f,
     });
@@ -379,9 +392,14 @@ static void loadPhysicsObjects(PhysicsLoader &loader)
     // remain controllable by the policy, they are only allowed to
     // rotate around the Z axis (infinite inertia in x & y axes)
     rigid_body_assets.metadatas[
-        (CountT)SimObject::Agent].mass.invInertiaTensor.x = 0.f;
+        (CountT)SimObject::AgentTeam0].mass.invInertiaTensor.x = 0.f;
     rigid_body_assets.metadatas[
-        (CountT)SimObject::Agent].mass.invInertiaTensor.y = 0.f;
+        (CountT)SimObject::AgentTeam0].mass.invInertiaTensor.y = 0.f;
+
+    rigid_body_assets.metadatas[
+        (CountT)SimObject::AgentTeam1].mass.invInertiaTensor.x = 0.f;
+    rigid_body_assets.metadatas[
+        (CountT)SimObject::AgentTeam1].mass.invInertiaTensor.y = 0.f;
 
     loader.loadRigidBodies(rigid_body_assets);
     free(rigid_body_data);
@@ -393,6 +411,11 @@ Manager::Impl * Manager::Impl::init(
     Sim::Config sim_cfg;
     sim_cfg.autoReset = mgr_cfg.autoReset;
     sim_cfg.initRandKey = rand::initKey(mgr_cfg.randSeed);
+
+    madrona::math::Vector3 teamColors[] = {
+        Vector3{ 1.f, 0.f, 0.f },
+        Vector3{ 0.f, 0.f, 1.f },
+    };
 
     switch (mgr_cfg.execMode) {
     case ExecMode::CUDA: {
@@ -412,7 +435,7 @@ Manager::Impl * Manager::Impl::init(
             initRenderManager(mgr_cfg, render_gpu_state);
 
         if (render_mgr.has_value()) {
-            loadRenderObjects(*render_mgr);
+            loadRenderObjects(*render_mgr, teamColors);
             sim_cfg.renderBridge = render_mgr->bridge();
         } else {
             sim_cfg.renderBridge = nullptr;
@@ -456,7 +479,7 @@ Manager::Impl * Manager::Impl::init(
     } break;
     case ExecMode::CPU: {
         PhysicsLoader phys_loader(ExecMode::CPU, 10);
-        loadPhysicsObjects(phys_loader);
+        // loadPhysicsObjects(phys_loader);
 
         ObjectManager *phys_obj_mgr = &phys_loader.getObjectManager();
         sim_cfg.rigidBodyObjMgr = phys_obj_mgr;
@@ -468,7 +491,7 @@ Manager::Impl * Manager::Impl::init(
             initRenderManager(mgr_cfg, render_gpu_state);
 
         if (render_mgr.has_value()) {
-            loadRenderObjects(*render_mgr);
+            loadRenderObjects(*render_mgr, teamColors);
             sim_cfg.renderBridge = render_mgr->bridge();
         } else {
             sim_cfg.renderBridge = nullptr;

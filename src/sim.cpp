@@ -106,11 +106,14 @@ inline void resetSystem(Engine &ctx, WorldReset &reset)
 {
     int32_t should_reset = reset.reset;
     if (ctx.data().autoReset) {
-        for (CountT i = 0; i < consts::numAgents; i++) {
-            Entity agent = ctx.data().cars[i];
-            Done done = ctx.get<Done>(agent);
-            if (done.v) {
-                should_reset = 1;
+        for (CountT team_idx = 0; team_idx < 2; ++team_idx) {
+            Team &team = ctx.data().teams[team_idx];
+            for (CountT i = 0; i < consts::numCarsPerTeam; i++) {
+                Entity agent = team.players[i];
+                Done done = ctx.get<Done>(agent);
+                if (done.v) {
+                    should_reset = 1;
+                }
             }
         }
     }
@@ -217,27 +220,30 @@ inline void carMovementSystem(Engine &engine,
     OBB e_obb = create_obb(pos, rot);
 
     // Check the other cars for collisions
-    for (int i = 0; i < 2; ++i) {
-        Entity car = engine.data().cars[i];
+    for (CountT team_idx = 0; team_idx < 2; ++team_idx) {
+        Team &team = engine.data().teams[team_idx];
+        for (int i = 0; i < consts::numCarsPerTeam; ++i) {
+            Entity car = team.players[i];
 
-        if (car != e && car.id < e.id) {
-            // Check for collision
-            OBB car_obb = create_obb(engine.get<Position>(car),
-                                     engine.get<Rotation>(car));
+            if (car != e && car.id < e.id) {
+                // Check for collision
+                OBB car_obb = create_obb(engine.get<Position>(car),
+                                         engine.get<Rotation>(car));
 
-            float min_overlap;
-            Vector2 min_overlap_axis;
-            if (intersectMovingOBBs2D(e_obb, car_obb,
-                                      min_overlap, min_overlap_axis)) {
+                float min_overlap;
+                Vector2 min_overlap_axis;
+                if (intersectMovingOBBs2D(e_obb, car_obb,
+                                          min_overlap, min_overlap_axis)) {
 
-                Vector3 diff = 0.5f * min_overlap * 
-                    Vector3{min_overlap_axis.x, min_overlap_axis.y, 0.f};
+                    Vector3 diff = 0.5f * min_overlap * 
+                        Vector3{min_overlap_axis.x, min_overlap_axis.y, 0.f};
 
-                pos -= diff;
-                vel.linear -= diff / consts::deltaT;
+                    pos -= diff;
+                    vel.linear -= diff / consts::deltaT;
 
-                engine.get<Position>(car) += diff;            
-                engine.get<Velocity>(car).linear += diff / consts::deltaT;
+                    engine.get<Position>(car) += diff;            
+                    engine.get<Velocity>(car).linear += diff / consts::deltaT;
+                }
             }
         }
     }

@@ -33,7 +33,8 @@ enum class SimObject : uint32_t {
     Cube,
     Wall,
     Door,
-    Agent,
+    AgentTeam0,
+    AgentTeam1,
     Button,
     Sphere,
     Plane,
@@ -98,9 +99,7 @@ struct Sim : public madrona::WorldBase {
     // Contains the walls for the arena
     Arena arena;
 
-    // Agent entity references. This entities live across all episodes
-    // and are just reset to the start of the level on reset.
-    Entity cars[consts::numCars];
+    Team teams[2];
 
     // There is a single ball in the world
     Entity ball;

@@ -203,21 +203,28 @@ void createPersistentEntities(Engine &ctx)
     ctx.data().arena.goals[0] = makeGoal(ctx, 0);
     ctx.data().arena.goals[1] = makeGoal(ctx, 1);
 
-    for (CountT i = 0; i < consts::numCars; ++i) {
-        Entity car = ctx.data().cars[i] =
-            ctx.makeRenderableEntity<Car>();
+    for (CountT team_idx = 0; team_idx < 2; ++team_idx) {
+        Team &team = ctx.data().teams[team_idx];
 
-        if (ctx.data().enableRender) {
-            render::RenderingSystem::attachEntityToView(ctx,
-                    car,
-                    100.f, 0.001f,
-                    1.5f * math::up);
+        SimObject team_obj = team_idx == 0 ?
+            SimObject::AgentTeam0 : SimObject::AgentTeam1;
+
+        for (CountT car_idx = 0; car_idx < consts::numCarsPerTeam; ++car_idx) {
+            Entity car = team.players[car_idx] =
+                ctx.makeRenderableEntity<Car>();
+
+            if (ctx.data().enableRender) {
+                render::RenderingSystem::attachEntityToView(ctx,
+                        car,
+                        100.f, 0.001f,
+                        1.5f * math::up);
+            }
+
+            ctx.get<Scale>(car) = Diag3x3::fromVec(consts::agentDimensions);
+            ctx.get<ObjectID>(car) = ObjectID { (int32_t)team_obj };
+            ctx.get<EntityType>(car) = EntityType::Agent;
+            ctx.get<DynamicEntityType>(car) = DynamicEntityType::Car;
         }
-
-        ctx.get<Scale>(car) = Diag3x3::fromVec(consts::agentDimensions);
-        ctx.get<ObjectID>(car) = ObjectID { (int32_t)SimObject::Agent };
-        ctx.get<EntityType>(car) = EntityType::Agent;
-        ctx.get<DynamicEntityType>(car) = DynamicEntityType::Car;
     }
 
     Entity ball = ctx.data().ball =
@@ -247,44 +254,53 @@ static void resetPersistentEntities(Engine &ctx)
         registerRigidBodyEntity(ctx, arena.goals[i].outerBorders[1], SimObject::Wall);
     }
 
-    for (CountT i = 0; i < consts::numCars; i++) {
-        Entity car_entity = ctx.data().cars[i];
-        // registerRigidBodyEntity(ctx, car_entity, SimObject::Agent);
+    for (CountT team_idx = 0; team_idx < 2; ++team_idx) {
+        Team &team = ctx.data().teams[team_idx];
 
-        // Place the agents near the starting wall
-        Vector3 pos { 0.f, 0.f, consts::agentDimensions.z };
-        Quat rot{};
+        for (CountT car_idx = 0; car_idx < consts::numCarsPerTeam; ++car_idx) {
+            Entity car_entity = team.players[car_idx];
 
-        if (i % 2 == 0) {
-            pos.x = 0.0f;
-            pos.y = consts::worldLength / 2.5f;
+            // Place the agents near the starting wall
+            Vector3 pos { 0.f, 0.f, consts::agentDimensions.z };
+            Quat rot{};
 
-            rot = Quat::angleAxis(
-                math::pi,
-                math::up);
-        } else {
-            pos.x = 0.0f;
-            pos.y = -consts::worldLength / 2.5f;
+            if (team_idx % 2 == 0) {
+                pos.x = 0.0f;
+                pos.y = consts::worldLength / 2.5f;
 
-            rot = Quat::angleAxis(
-                0.0f,
-                math::up);
+                rot = Quat::angleAxis(
+                    math::pi,
+                    math::up);
+            } else {
+                pos.x = 0.0f;
+                pos.y = -consts::worldLength / 2.5f;
+
+                rot = Quat::angleAxis(
+                    0.0f,
+                    math::up);
+            }
+
+            // Set the position's x component
+            pos.x = ((float)car_idx+1.f) * (consts::worldWidth / ((float)consts::numCarsPerTeam+1.f)) -
+                consts::worldWidth/2.f;
+
+            printf("%f %f %f\n", pos.x, pos.y, pos.z);
+
+            ctx.get<Position>(car_entity) = pos;
+            ctx.get<Rotation>(car_entity) = rot;
+
+            ctx.get<Velocity>(car_entity) = {
+                Vector3::zero(),
+                Vector3::zero(),
+            };
+            ctx.get<Action>(car_entity) = Action {
+                .moveAmount = 0,
+                .moveAngle = 0,
+                .rotate = consts::numTurnBuckets / 2
+            };
+
+            ctx.get<StepsRemaining>(car_entity).t = consts::episodeLen;
         }
-
-        ctx.get<Position>(car_entity) = pos;
-        ctx.get<Rotation>(car_entity) = rot;
-
-        ctx.get<Velocity>(car_entity) = {
-            Vector3::zero(),
-            Vector3::zero(),
-        };
-        ctx.get<Action>(car_entity) = Action {
-            .moveAmount = 0,
-            .moveAngle = 0,
-            .rotate = consts::numTurnBuckets / 2
-        };
-
-        ctx.get<StepsRemaining>(car_entity).t = consts::episodeLen;
     }
 
     Entity ball_entity = ctx.data().ball;
