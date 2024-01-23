@@ -15,7 +15,8 @@ struct Segment {
 int intersectMovingSphereAABB(Sphere s,
                               Vector3 dx,
                               AABB aabb,
-                              float &t)
+                              float &t,
+                              Vector3 &s_pos_out)
 {
     AABB e = aabb;
 
@@ -28,6 +29,10 @@ int intersectMovingSphereAABB(Sphere s,
                                           0.0f, 1.0f, t_out);
 
     t = t_out;
+
+    // Update the sphere's position in the case of a collision so that the sphere
+    // is no longer colliding with the OBB
+    s_pos_out = s.center + t * s.center;
 
     return (int)intersected;
 }

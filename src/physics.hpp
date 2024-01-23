@@ -22,7 +22,8 @@ struct WallPlane {
 int intersectMovingSphereAABB(Sphere s, 
                               madrona::math::Vector3 dx,
                               madrona::math::AABB aabb,
-                              float &t);
+                              float &t,
+                              madrona::math::Vector3 &s_pos_out);
 
 // We aren't doing precise collision detection so we just care to see whether
 // a collision has happened at all.

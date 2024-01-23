@@ -171,16 +171,17 @@ inline void carMovementSystem(Engine &engine,
     Vector3 rel_dx = rot.inv().rotateVec(dx - ball_dx);
 
     float out_t;
+    Vector3 sphere_pos_out;
     int intersect = intersectMovingSphereAABB(
         ball_sphere, rel_dx, 
-        car_aabb, out_t);
+        car_aabb, out_t, sphere_pos_out);
 
     if (intersect) {
         // Take the difference of the sphere's center and the car's
         // center at impact.
         Vector3 diff = rot.rotateVec(out_t * rel_dx - car_ball_rel);
-
         engine.get<Velocity>(ball_entity).linear = diff * 10.0f;
+        engine.get<Position>(ball_entity) += rot.rotateVec(sphere_pos_out);
     }
 
     // For now, we just naively loop through the other agents, and then 
