@@ -187,5 +187,23 @@ int intersectMovingSphereWall(Sphere s,
     }
 #endif
 }
+
+int intersectSphereWall(Sphere s,
+                        const WallPlane &plane,
+                        float &min_overlap)
+{
+    Vector2 center_2d = { s.center.x, s.center.y };
+    Vector2 normal_2d = { plane.normal.x, plane.normal.y };
+
+    float dist = center_2d.dot(normal_2d) - plane.point.dot(normal_2d) -
+                 s.radius;
+
+    if (dist < 0.f) {
+        min_overlap = -dist;
+        return 1;
+    } else {
+        return 0;
+    }
+}
     
 }

@@ -35,10 +35,16 @@ int intersectMovingOBBWall(const OBB &a,
                            const WallPlane &plane,
                            float &min_overlap);
 
+#if 0
 int intersectMovingSphereWall(Sphere s,
                               madrona::math::Vector3 dx,
                               const WallPlane &plane,
                               float &t_out,
                               madrona::math::Vector3 &p_out);
+#endif
+
+int intersectSphereWall(Sphere s,
+                        const WallPlane &plane,
+                        float &min_overlap);
 
 }

@@ -261,27 +261,22 @@ inline void ballMovementSystem(Engine &engine,
     (void)ball_goal_state;
 
     Vector3 dx = vel.linear * consts::deltaT;
+    pos += dx;
 
     for (int i = 0; i < 4; ++i) {
-
         WallPlane &plane = engine.data().arena.wallPlanes[i];
 
-        float t;
-        Vector3 p;
-        if (intersectMovingSphereWall(Sphere{ pos, consts::ballRadius },
-                dx, plane, t, p)) {
-            dx = t * dx;
+        float min_overlap;
+        if (intersectSphereWall(Sphere{pos, consts::ballRadius}, 
+                    plane, min_overlap)) {
+            printf("Ball intersected wall!\n");
 
-            printf("Ball intersection with wall\n");
+            Vector3 normal_3d = Vector3{plane.normal.x, plane.normal.y, 0.f};
+            pos += normal_3d * min_overlap;
 
-            vel.linear *= -1.f;
-
-            // vel.linear = reflect(vel.linear, 
-                    // Vector3{plane.normal.x, plane.normal.y, 0.f});
+            vel.linear = reflect(vel.linear, normal_3d);
         }
     }
-
-    pos += dx;
 
     vel.linear *= 0.95f;
 }
