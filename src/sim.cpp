@@ -241,15 +241,12 @@ inline void carMovementSystem(Engine &engine,
         }
     }
 
-    printf("%f %f %f\n", pos.x, pos.y, pos.z);
-
     // Check the walls for collisions
     for (int i = 0; i < 4; ++i) {
         auto &plane = engine.data().arena.wallPlanes[i];
 
         float overlap;
         if (intersectMovingOBBWall(e_obb, plane, overlap)) {
-            printf("Intersection!\n");
             pos -= overlap * Vector3{plane.normal.x, plane.normal.y, 0.0f};
         }
     }
@@ -263,7 +260,27 @@ inline void ballMovementSystem(Engine &engine,
     (void)engine;
     (void)ball_goal_state;
 
-    pos += vel.linear * consts::deltaT;
+    Vector3 dx = vel.linear * consts::deltaT;
+
+    bool intersection = 0;
+
+    for (int i = 0; i < 4; ++i) {
+        WallPlane &plane = engine.data().arena.wallPlanes[i];
+
+        float t;
+        Vector3 p;
+        if (intersectMovingSphereWall(Sphere{ pos, consts::ballRadius },
+                dx, plane, t, p)) {
+
+            intersectMovingSphereWall(
+                Sphere{ pos, consts::ballRadius },
+                dx, plane, t, p);
+
+            dx = p - pos;
+        }
+    }
+
+    pos += dx;
 
     vel.linear *= 0.95f;
 }

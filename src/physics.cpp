@@ -136,5 +136,37 @@ int intersectMovingOBBWall(const OBB &a,
         return 0;
     }
 }
+
+int intersectMovingSphereWall(Sphere s,
+                              Vector3 dx,
+                              const WallPlane &plane,
+                              float &t_out,
+                              Vector3 &p_out)
+{
+    float dist = plane.normal.dot({s.center.x, s.center.y}) -
+                 plane.normal.dot(plane.point);
+
+    if (std::abs(dist) <= s.radius) {
+        t_out = 0.0f;
+        p_out = s.center;
+        return 1;
+    } else {
+        float denom = plane.normal.dot({dx.x, dx.y});
+        if (denom * dist >= 0.f) {
+            return 0;
+        } else {
+            float r = dist > 0.f ? s.radius : -s.radius;
+            t_out = (r - dist) / denom;
+            p_out = s.center + t_out * dx - 
+                s.radius * Vector3{plane.normal.x, plane.normal.y, 0.f};
+
+            if (t_out < 1.0f && t_out > 0.0f) {
+                return 1;
+            } else {
+                return 0;
+            }
+        }
+    }
+}
     
 }
