@@ -3,6 +3,9 @@
 #include <assert.h>
 #include "physics.hpp"
 
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
+#define MIN(x, y) (((x) < (y)) ? (x) : (y))
+
 namespace madEscape {
 
 using namespace madrona::math;
@@ -74,8 +77,8 @@ int intersectMovingOBBs2D(const OBB &a,
                 
                 float b_dot_a_norm = b_vert.dot(a_norm);
 
-                b_min = std::min(b_dot_a_norm, b_min);
-                b_max = std::max(b_dot_a_norm, b_max);
+                b_min = MIN(b_dot_a_norm, b_min);
+                b_max = MAX(b_dot_a_norm, b_max);
             }
 
             if (a_max < b_min || a_min > b_max) {

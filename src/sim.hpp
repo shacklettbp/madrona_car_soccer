@@ -103,6 +103,8 @@ struct Sim : public madrona::WorldBase {
 
     // There is a single ball in the world
     Entity ball;
+
+    madrona::Query<CollisionData> collisionQuery;
 };
 
 class Engine : public ::madrona::CustomContext<Engine, Sim> {

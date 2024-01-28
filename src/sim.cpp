@@ -39,6 +39,7 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<EntityType>();
     registry.registerComponent<BallGoalState>();
     registry.registerComponent<DynamicEntityType>();
+    registry.registerComponent<CollisionData>();
 
     registry.registerSingleton<WorldReset>();
 
@@ -48,6 +49,7 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerArchetype<ButtonEntity>();
     registry.registerArchetype<Car>();
     registry.registerArchetype<Ball>();
+    registry.registerArchetype<Collision>();
 
     registry.exportSingleton<WorldReset>(
         (uint32_t)ExportID::Reset);
@@ -151,7 +153,7 @@ inline void carMovementSystem(Engine &engine,
     }
 
     // Hack friction
-    vel.linear *= 0.95f;
+    // vel.linear *= 0.95f;
     
     // This is the uninterrupted displacement vector given no collisions.
     Vector3 dx = vel.linear * consts::deltaT;
@@ -183,8 +185,23 @@ inline void carMovementSystem(Engine &engine,
         // Take the difference of the sphere's center and the car's
         // center at impact.
         Vector3 diff = rot.rotateVec(out_t * rel_dx - car_ball_rel);
+        Vector3 overlap = rot.rotateVec(sphere_pos_out);
+
+#if 0
         engine.get<Velocity>(ball_entity).linear = diff * 10.0f;
-        engine.get<Position>(ball_entity) += rot.rotateVec(sphere_pos_out);
+        engine.get<Position>(ball_entity) += overlap;
+#endif
+
+        CollisionData collision = {
+            .a = ball_entity,
+            .b = e,
+            .overlap = overlap,
+            .diff = diff,
+        };
+
+        // TODO: Create collision entity
+        Loc loc = engine.makeTemporary<Collision>();
+        engine.get<CollisionData>(loc) = collision;
     }
 
     // For now, we just naively loop through the other agents, and then 
@@ -238,11 +255,23 @@ inline void carMovementSystem(Engine &engine,
                     Vector3 diff = 0.5f * min_overlap * 
                         Vector3{min_overlap_axis.x, min_overlap_axis.y, 0.f};
 
+#if 0
                     pos -= diff;
                     vel.linear -= diff / consts::deltaT;
-
                     engine.get<Position>(car) += diff;            
                     engine.get<Velocity>(car).linear += diff / consts::deltaT;
+#endif
+
+                    // TODO: Create collision data
+                    CollisionData collision = {
+                        .a = e,
+                        .b = car,
+                        .overlap = diff,
+                        .diff = diff
+                    };
+
+                    Loc loc = engine.makeTemporary<Collision>();
+                    engine.get<CollisionData>(loc) = collision;
                 }
             }
         }
@@ -254,12 +283,32 @@ inline void carMovementSystem(Engine &engine,
 
         float overlap;
         if (intersectMovingOBBWall(e_obb, plane, overlap)) {
-            pos -= overlap * Vector3{plane.normal.x, plane.normal.y, 0.0f};
+            Vector3 overlap_vec = overlap *
+                Vector3{plane.normal.x, plane.normal.y, 0.0f};
+
+#if 0
+            pos -= overlap_vec;
+#endif
+
+            CollisionData collision = {
+                .a = e,
+                .b = Entity::none(),
+                .overlap = overlap_vec,
+                .diff = overlap_vec
+            };
+
+            Loc loc = engine.makeTemporary<Collision>();
+            engine.get<CollisionData>(loc) = collision;
         }
     }
+
+#if 0
+    vel.linear *= 0.95f;
+#endif
 }
 
 inline void checkBallGoalPosts(Engine &engine,
+                               Entity e,
                                Position &pos,
                                Velocity &vel,
                                BallGoalState &ball_gs,
@@ -290,14 +339,27 @@ inline void checkBallGoalPosts(Engine &engine,
             printf("Ball intersected goal post!\n");
 
             Vector3 normal_3d = Vector3{s0.normal.x, s0.normal.y, 0.f};
-            pos += normal_3d * min_overlap;
 
+#if 0
+            pos += normal_3d * min_overlap;
             vel.linear = reflect(vel.linear, normal_3d);
+#endif
+
+            CollisionData collision = {
+                .a = e,
+                .b = Entity::none(),
+                .overlap = normal_3d * min_overlap,
+                .diff = reflect(vel.linear, normal_3d),
+            };
+
+            Loc loc = engine.makeTemporary<Collision>();
+            engine.get<CollisionData>(loc) = collision;
         }
     }
 }
 
 inline void ballMovementSystem(Engine &engine,
+                               Entity e,
                                Position &pos,
                                Velocity &vel,
                                BallGoalState &ball_gs)
@@ -318,17 +380,72 @@ inline void ballMovementSystem(Engine &engine,
             printf("Ball intersected wall!\n");
 
             Vector3 normal_3d = Vector3{plane.normal.x, plane.normal.y, 0.f};
-            pos += normal_3d * min_overlap;
 
+#if 0
+            pos += normal_3d * min_overlap;
             vel.linear = reflect(vel.linear, normal_3d);
+#endif
+
+            CollisionData collision = {
+                .a = e,
+                .b = Entity::none(),
+                .overlap = normal_3d * min_overlap,
+                .diff = reflect(vel.linear, normal_3d),
+            };
+
+            Loc loc = engine.makeTemporary<Collision>();
+            engine.get<CollisionData>(loc) = collision;
         }
     }
 
     // Check collision against the goal posts
     for (int i = 0; i < 2; ++i) {
-        checkBallGoalPosts(engine, pos, vel, ball_gs, i);
+        checkBallGoalPosts(engine, e, pos, vel, ball_gs, i);
     }
 
+#if 0
+    vel.linear *= 0.95f;
+#endif
+}
+
+inline void collisionResolveSystem(Engine &engine,
+                                   WorldReset)
+{
+    auto resolve_collision = [&engine](CollisionData &data) {
+        if (data.b == Entity::none()) {
+            if (engine.get<DynamicEntityType>(data.a) == DynamicEntityType::Car) {
+                // A is a car and B is a wall
+                engine.get<Position>(data.a) -= data.overlap;
+            } else {
+                // A is a ball and B is a wall
+                engine.get<Position>(data.a) += data.overlap;
+                engine.get<Velocity>(data.a).linear = data.diff;
+            }
+        } else if (engine.get<DynamicEntityType>(data.a) == 
+                DynamicEntityType::Ball) {
+            // A is a ball, B is a car
+            engine.get<Velocity>(data.a).linear = data.diff * 10.f;
+            engine.get<Position>(data.a) += data.overlap;
+        } else {
+            // A is a car, B is a car
+            engine.get<Position>(data.a) -= data.diff;
+            engine.get<Velocity>(data.a).linear -= data.diff / consts::deltaT;
+
+            engine.get<Position>(data.b) += data.diff;
+            engine.get<Velocity>(data.b).linear += data.diff / consts::deltaT;
+        }
+    };
+
+    engine.iterateQuery(engine.data().collisionQuery, resolve_collision);
+}
+
+inline void velocityCorrectSystem(Engine &engine,
+                                  DynamicEntityType,
+                                  Velocity &vel)
+{
+    (void)engine;
+
+    // Friction hack
     vel.linear *= 0.95f;
 }
 
@@ -359,10 +476,8 @@ TaskGraph::NodeID queueSortByWorld(TaskGraph::Builder &builder,
 {
     auto sort_sys =
         builder.addToGraph<SortArchetypeNode<ArchetypeT, WorldID>>(
-            deps);
+                deps);
     auto post_sort_reset_tmp =
-
-        ctx.get<StepsRemaining>(car_).t = consts::episodeLen;
         builder.addToGraph<ResetTmpAllocNode>({sort_sys});
 
     return post_sort_reset_tmp;
@@ -384,17 +499,38 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
 
     auto ball_move_sys = builder.addToGraph<ParallelForNode<Engine,
         ballMovementSystem,
+            Entity,
             Position,
             Velocity,
             BallGoalState
         >>({move_sys});
+
+#ifdef MADRONA_GPU_MODE
+    auto sort_collisions = queueSortByWorld<Collision>(builder, {ball_move_sys});
+
+    auto collision_resolve = builder.addToGraph<ParallelForNode<Engine,
+         collisionResolveSystem,
+            WorldReset
+        >>({sort_collisions});
+#else
+    auto collision_resolve = builder.addToGraph<ParallelForNode<Engine,
+         collisionResolveSystem,
+            WorldReset
+        >>({ball_move_sys});
+#endif
+
+    auto velocity_correct_system = builder.addToGraph<ParallelForNode<Engine,
+         velocityCorrectSystem,
+            DynamicEntityType,
+            Velocity
+        >>({collision_resolve});
 
     // Check if the episode is over
     auto done_sys = builder.addToGraph<ParallelForNode<Engine,
         stepTrackerSystem,
             StepsRemaining,
             Done
-        >>({ball_move_sys});
+        >>({velocity_correct_system});
 
     // Conditionally reset the world if the episode is over
     auto reset_sys = builder.addToGraph<ParallelForNode<Engine,
@@ -402,7 +538,8 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             WorldReset
         >>({done_sys});
 
-    auto clear_tmp = builder.addToGraph<ResetTmpAllocNode>({reset_sys});
+    auto clear_temporaries = builder.addToGraph<ClearTmpNode<Collision>>({reset_sys});
+    auto clear_tmp = builder.addToGraph<ResetTmpAllocNode>({clear_temporaries});
     (void)clear_tmp;
 
 #ifdef MADRONA_GPU_MODE
@@ -450,6 +587,8 @@ Sim::Sim(Engine &ctx,
 
     // Generate initial world state
     initWorld(ctx);
+
+    collisionQuery = ctx.query<CollisionData>();
 }
 
 // This declaration is needed for the GPU backend in order to generate the

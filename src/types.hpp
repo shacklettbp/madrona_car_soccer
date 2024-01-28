@@ -206,6 +206,18 @@ struct Arena {
     WallPlane wallPlanes[4];
 };
 
+// For car-car collision, a is the car to which we subtract `overlap`,
+// and b is the car to which we add `overlap`.
+struct CollisionData {
+    Entity a;
+    Entity b;
+
+    // These vectors will be used differently depending on what type 
+    // of entity a and b are.
+    madrona::math::Vector3 overlap;
+    madrona::math::Vector3 diff;
+};
+
 /* ECS Archetypes for the game */
 
 enum class BallGoalState {
@@ -339,6 +351,10 @@ struct PhysicsEntity : public madrona::Archetype<
     madrona::phys::broadphase::LeafID,
     EntityType,
     madrona::render::Renderable
+> {};
+
+struct Collision : public madrona::Archetype<
+    CollisionData
 > {};
 
 struct Team {

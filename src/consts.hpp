@@ -7,7 +7,7 @@ namespace madEscape {
 
 namespace consts {
 inline constexpr madrona::CountT numCars = 2;
-inline constexpr madrona::CountT numCarsPerTeam = 2;
+inline constexpr madrona::CountT numCarsPerTeam = 3;
 
 
 
