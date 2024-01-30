@@ -610,54 +610,41 @@ Tensor Manager::selfObservationTensor() const
                                Tensor::ElementType::Float32,
                                {
                                    impl_->cfg.numWorlds,
-                                   consts::numAgents,
-                                   8,
+                                   4,
                                });
 }
 
-Tensor Manager::partnerObservationsTensor() const
+Tensor Manager::ballTensor() const
 {
-    return impl_->exportTensor(ExportID::PartnerObservations,
+    return impl_->exportTensor(ExportID::BallObservation,
                                Tensor::ElementType::Float32,
                                {
                                    impl_->cfg.numWorlds,
-                                   consts::numAgents,
-                                   consts::numAgents - 1,
                                    3,
                                });
 }
 
-Tensor Manager::roomEntityObservationsTensor() const
+Tensor Manager::teamObservationTensor() const
 {
-    return impl_->exportTensor(ExportID::RoomEntityObservations,
+    return impl_->exportTensor(ExportID::TeamObservation,
                                Tensor::ElementType::Float32,
                                {
                                    impl_->cfg.numWorlds,
-                                   consts::numAgents,
-                                   consts::maxEntitiesPerRoom,
+                                   consts::numCarsPerTeam,
+                                   consts::numCarsPerTeam - 1,
                                    3,
                                });
 }
 
-Tensor Manager::doorObservationTensor() const
+Tensor Manager::enemyObservationTensor() const
 {
-    return impl_->exportTensor(ExportID::DoorObservation,
+    return impl_->exportTensor(ExportID::EnemyObservation,
                                Tensor::ElementType::Float32,
                                {
                                    impl_->cfg.numWorlds,
-                                   consts::numAgents,
+                                   consts::numCarsPerTeam,
+                                   consts::numCarsPerTeam,
                                    3,
-                               });
-}
-
-Tensor Manager::lidarTensor() const
-{
-    return impl_->exportTensor(ExportID::Lidar, Tensor::ElementType::Float32,
-                               {
-                                   impl_->cfg.numWorlds,
-                                   consts::numAgents,
-                                   consts::numLidarSamples,
-                                   2,
                                });
 }
 

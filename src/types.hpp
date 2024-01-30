@@ -54,62 +54,40 @@ struct Done {
     int32_t v;
 };
 
+// Global position of the ball
+struct BallObservation {
+    float x, y, z;
+};
+
 // Observation state for the current agent.
 // Positions are rescaled to the bounds of the play area to assist training.
 struct SelfObservation {
-    float roomX;
-    float roomY;
-    float globalX;
-    float globalY;
-    float globalZ;
-    float maxY;
+    // For now, only x and y are used, but when we introduce the ramps and walls,
+    // we're going to use z.
+    float x, y, z;
+    
+    // The direction in which the car is facing.
     float theta;
-    float isGrabbing;
 };
 
-// The state of the world is passed to each agent in terms of egocentric
-// polar coordinates. theta is degrees off agent forward.
 struct PolarObservation {
-    float r;
-    float theta;
+    float r, theta;
 };
 
-struct PartnerObservation {
+struct OtherObservation {
+    // Used to get the relative position/direction from current agent.
     PolarObservation polar;
-    float isGrabbing;
+    
+    // The other's facing direction.
+    float o_theta;
 };
 
-// Egocentric observations of other agents
-struct PartnerObservations {
-    PartnerObservation obs[consts::numAgents - 1];
+struct TeamObservation {
+    OtherObservation obs[consts::numCarsPerTeam-1];
 };
 
-// PartnerObservations is exported as a
-// [N, A, consts::numAgents - 1, 3] // tensor to pytorch
-static_assert(sizeof(PartnerObservations) == sizeof(float) *
-    (consts::numAgents - 1) * 3);
-
-// Per-agent egocentric observations for the interactable entities
-// in the current room.
-struct EntityObservation {
-    PolarObservation polar;
-    float encodedType;
-};
-
-struct RoomEntityObservations {
-    EntityObservation obs[consts::maxEntitiesPerRoom];
-};
-
-// RoomEntityObservations is exported as a
-// [N, A, maxEntitiesPerRoom, 3] tensor to pytorch
-static_assert(sizeof(RoomEntityObservations) == sizeof(float) *
-    consts::maxEntitiesPerRoom * 3);
-
-// Observation of the current room's door. It's relative position and
-// whether or not it is ope
-struct DoorObservation {
-    PolarObservation polar;
-    float isOpen; // 1.0 when open, 0.0 when closed.
+struct EnemyObservation {
+    OtherObservation obs[consts::numCarsPerTeam];
 };
 
 struct LidarSample {
@@ -218,6 +196,14 @@ struct CollisionData {
     madrona::math::Vector3 diff;
 };
 
+struct TeamState {
+    int32_t teamIdx;
+};
+
+struct CarBallTouchState {
+    int32_t touched;
+};
+
 /* ECS Archetypes for the game */
 
 enum class BallGoalState {
@@ -236,6 +222,7 @@ struct Ball : public madrona::Archetype<
     EntityType,
     BallGoalState,
     DynamicEntityType,
+    BallObservation,
     madrona::render::Renderable
 > {};
 
@@ -247,9 +234,18 @@ struct Car : public madrona::Archetype<
     ObjectID,
     Action,
     EntityType,
-    StepsRemaining,
     Done,
     DynamicEntityType,
+    TeamState,
+    CarBallTouchState,
+
+    // Observations
+    SelfObservation,
+    TeamObservation,
+    EnemyObservation,
+    StepsRemaining,
+    Reward,
+
     madrona::render::RenderCamera,
     madrona::render::Renderable
 > {};
@@ -283,9 +279,9 @@ struct Agent : public madrona::Archetype<
 
     // Observations
     SelfObservation,
-    PartnerObservations,
-    RoomEntityObservations,
-    DoorObservation,
+    // PartnerObservations,
+    // RoomEntityObservations,
+    // DoorObservation,
     Lidar,
     StepsRemaining,
 

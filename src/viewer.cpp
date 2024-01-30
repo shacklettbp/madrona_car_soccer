@@ -134,10 +134,9 @@ int main(int argc, char *argv[])
 
     // Printers
     auto self_printer = mgr.selfObservationTensor().makePrinter();
-    auto partner_printer = mgr.partnerObservationsTensor().makePrinter();
-    auto room_ent_printer = mgr.roomEntityObservationsTensor().makePrinter();
-    auto door_printer = mgr.doorObservationTensor().makePrinter();
-    auto lidar_printer = mgr.lidarTensor().makePrinter();
+    auto team_printer = mgr.teamObservationTensor().makePrinter();
+    auto enemy_printer = mgr.enemyObservationTensor().makePrinter();
+    auto ball_printer = mgr.ballTensor().makePrinter();
     auto steps_remaining_printer = mgr.stepsRemainingTensor().makePrinter();
     auto reward_printer = mgr.rewardTensor().makePrinter();
 
@@ -145,17 +144,14 @@ int main(int argc, char *argv[])
         printf("Self\n");
         self_printer.print();
 
-        printf("Partner\n");
-        partner_printer.print();
+        printf("Team\n");
+        team_printer.print();
 
-        printf("Room Entities\n");
-        room_ent_printer.print();
+        printf("Enemy\n");
+        enemy_printer.print();
 
-        printf("Door\n");
-        door_printer.print();
-
-        printf("Lidar\n");
-        lidar_printer.print();
+        printf("Ball\n");
+        ball_printer.print();
 
         printf("Steps Remaining\n");
         steps_remaining_printer.print();
@@ -256,6 +252,6 @@ int main(int argc, char *argv[])
 
         mgr.step();
 
-        // printObs();
+        printObs();
     }, []() {});
 }

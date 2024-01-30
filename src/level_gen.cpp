@@ -224,6 +224,7 @@ void createPersistentEntities(Engine &ctx)
             ctx.get<ObjectID>(car) = ObjectID { (int32_t)team_obj };
             ctx.get<EntityType>(car) = EntityType::Agent;
             ctx.get<DynamicEntityType>(car) = DynamicEntityType::Car;
+            ctx.get<TeamState>(car).teamIdx = team_idx;
         }
     }
 
@@ -298,6 +299,7 @@ static void resetPersistentEntities(Engine &ctx)
                 .moveAngle = 0,
                 .rotate = consts::numTurnBuckets / 2
             };
+            ctx.get<CarBallTouchState>(car_entity).touched = 0;
 
             ctx.get<StepsRemaining>(car_entity).t = consts::episodeLen;
         }
