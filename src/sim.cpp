@@ -55,7 +55,7 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerArchetype<Collision>();
 
     registry.exportSingleton<WorldReset>((uint32_t)ExportID::Reset);
-    registry.exportColumn<Ball, BallObservation>((uint32_t)ExportID::BallObservation);
+    registry.exportColumn<Car, BallObservation>((uint32_t)ExportID::BallObservation);
     registry.exportColumn<Car, Action>((uint32_t)ExportID::Action);
     registry.exportColumn<Car, SelfObservation>((uint32_t)ExportID::SelfObservation);
     registry.exportColumn<Car, TeamObservation>((uint32_t)ExportID::TeamObservation);
@@ -470,6 +470,7 @@ inline void collectCarObservationSystem(Engine &engine,
                                         SelfObservation &self_obs,
                                         TeamObservation &team_obs,
                                         EnemyObservation &enemy_obs,
+                                        BallObservation &ball_obs,
                                         TeamState team_state)
 {
     // Handle self observation first
@@ -515,6 +516,13 @@ inline void collectCarObservationSystem(Engine &engine,
         obs.polar = xyToPolar(to_view.rotateVec(to_other));
         obs.o_theta = angleObs(computeZAngle(other_rot));
     }
+
+    Entity ball_entity = engine.data().ball;
+    Vector3 ball_pos = engine.get<Position>(ball_entity);
+
+    ball_obs.x = ball_pos.x / consts::worldLength;
+    ball_obs.y = ball_pos.y / consts::worldLength;
+    ball_obs.z = 0.f;
 }
 
 inline void collectBallObservationSystem(Engine &engine,
@@ -522,6 +530,8 @@ inline void collectBallObservationSystem(Engine &engine,
                                          Position pos,
                                          BallObservation &obs)
 {
+    (void)engine, (void)e;
+
     obs.x = pos.x / consts::worldLength;
     obs.y = pos.y / consts::worldLength;
     obs.z = 0.f;
@@ -535,10 +545,11 @@ inline void rewardSystem(Engine &engine,
                          CarBallTouchState touch_state,
                          Reward &reward_out)
 {
+    (void)e;
+
     Vector3 car_fwd = rot.rotateVec({0.f, 1.f, 0.f});
 
     Team &my_team = engine.data().teams[team_state.teamIdx];
-    Team &other_team = engine.data().teams[team_state.teamIdx ^ 1];
 
     // 1) Ball is in front of / close to the car
     float reward = 0.f;
@@ -553,13 +564,11 @@ inline void rewardSystem(Engine &engine,
     reward += cos_theta * 0.1f / (diff.length2() + 1.f);
 
     // 2) Ball was hit by a car in your team
-    bool team_hit = false;
     for (int i = 0; i < consts::numCarsPerTeam; ++i) {
         Entity player_entity = my_team.players[i];
 
         int32_t t = engine.get<CarBallTouchState>(player_entity).touched;
         if (t) {
-            team_hit = true;
             reward += 0.1f;
             break;
         }
@@ -689,6 +698,7 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             SelfObservation,
             TeamObservation,
             EnemyObservation,
+            BallObservation,
             TeamState
         >>({velocity_correct_system});
 

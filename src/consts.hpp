@@ -6,7 +6,7 @@
 namespace madEscape {
 
 namespace consts {
-inline constexpr madrona::CountT numCars = 2;
+inline constexpr madrona::CountT numTeams = 2;
 inline constexpr madrona::CountT numCarsPerTeam = 3;
 
 
@@ -16,7 +16,7 @@ inline constexpr madrona::CountT numCarsPerTeam = 3;
 inline constexpr madrona::CountT numRooms = 3;
 
 // Generated levels assume 2 agents
-inline constexpr madrona::CountT numAgents = numCars * numCarsPerTeam;
+inline constexpr madrona::CountT numAgents = numTeams * numCarsPerTeam;
 
 // Maximum number of interactive objects per challenge room. This is needed
 // in order to setup the fixed-size learning tensors appropriately.

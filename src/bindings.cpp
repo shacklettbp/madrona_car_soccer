@@ -5,6 +5,8 @@
 
 namespace nb = nanobind;
 
+using namespace madrona::py;
+
 namespace madEscape {
 
 // This file creates the python bindings used by the learning code.
@@ -48,6 +50,13 @@ NB_MODULE(madrona_rocket_league, m) {
         .def("steps_remaining_tensor", &Manager::stepsRemainingTensor)
         .def("rgb_tensor", &Manager::rgbTensor)
         .def("depth_tensor", &Manager::depthTensor)
+        .def("jax", JAXInterface::buildEntry<
+                &Manager::trainInterface,
+                &Manager::step
+#ifdef MADRONA_CUDA_SUPPORT
+                , &Manager::gpuRolloutStep
+#endif
+             >())
     ;
 }
 

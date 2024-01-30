@@ -244,6 +244,7 @@ struct Car : public madrona::Archetype<
     SelfObservation,
     TeamObservation,
     EnemyObservation,
+    BallObservation,
     StepsRemaining,
     Reward,
 

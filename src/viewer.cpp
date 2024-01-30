@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
 #endif
 
     WindowManager wm {};
-    WindowHandle window = wm.makeWindow("Escape Room", 2730, 1536);
+    WindowHandle window = wm.makeWindow("Escape Room", 2730/2, 1536/2);
     render::GPUHandle render_gpu = wm.initGPU(0, { window.get() });
 
     // Create the simulation manager

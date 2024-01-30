@@ -44,8 +44,6 @@ class PrefixCommon(nn.Module):
     ):
         obs, self_ob = obs.pop('self')
         obs, steps_remaining = obs.pop('stepsRemaining')
-        obs, lidar = obs.pop('lidar')
-        obs, agent_id = obs.pop('agentID')
 
         #lidar = nn.Conv(
         #        features=1,
@@ -53,13 +51,14 @@ class PrefixCommon(nn.Module):
         #        padding='CIRCULAR',
         #        dtype=self.dtype,
         #    )(lidar)
-        lidar = lidar.reshape(*lidar.shape[0:-2], -1)
+        # lidar = lidar.reshape(*lidar.shape[0:-2], -1)
+
+        print(self_ob.shape)
+        print(steps_remaining.shape)
 
         self_ob = jnp.concatenate([
                 self_ob,
                 steps_remaining,
-                lidar,
-                agent_id,
             ], axis=-1)
 
         return obs.copy({
