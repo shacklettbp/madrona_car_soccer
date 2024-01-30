@@ -296,8 +296,7 @@ static void resetPersistentEntities(Engine &ctx)
             };
             ctx.get<Action>(car_entity) = Action {
                 .moveAmount = 0,
-                .moveAngle = 0,
-                .rotate = consts::numTurnBuckets / 2
+                .rotate = 0,
             };
             ctx.get<CarBallTouchState>(car_entity).touched = 0;
 

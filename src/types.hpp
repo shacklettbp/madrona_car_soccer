@@ -35,9 +35,8 @@ struct WorldReset {
 // Discrete action component. Ranges are defined by consts::numMoveBuckets (5),
 // repeated here for clarity
 struct Action {
-    int32_t moveAmount; // [0, 3]
-    int32_t moveAngle; // [0, 7]
-    int32_t rotate; // [-2, 2]
+    int32_t moveAmount; // [-1, 1]
+    int32_t rotate; // [-1, 1]
 };
 
 // Per-agent reward
@@ -68,6 +67,8 @@ struct SelfObservation {
     
     // The direction in which the car is facing.
     float theta;
+
+    float vel_r, vel_theta;
 };
 
 struct PolarObservation {

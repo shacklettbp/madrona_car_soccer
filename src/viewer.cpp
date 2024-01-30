@@ -123,7 +123,7 @@ int main(int argc, char *argv[])
 
                 printf("%d, %d: %d %d %d %d\n",
                        i, j, move_amount, move_angle, turn, g);
-                mgr.setAction(i, j, move_amount, move_angle, turn, g);
+                mgr.setAction(i, j, move_amount, turn);
             }
         }
 
@@ -178,12 +178,8 @@ int main(int argc, char *argv[])
     {
         using Key = Viewer::KeyboardKey;
 
-        int32_t x = 0;
         int32_t y = 0;
-        int32_t r = 2;
-        int32_t g = 0;
-
-        bool shift_pressed = input.keyPressed(Key::Shift);
+        int32_t r = 0;
 
         if (input.keyPressed(Key::W)) {
             y += 1;
@@ -192,55 +188,16 @@ int main(int argc, char *argv[])
             y -= 1;
         }
 
-        if (input.keyPressed(Key::D)) {
-            x += 1;
-        }
-        if (input.keyPressed(Key::A)) {
-            x -= 1;
-        }
-
         if (input.keyPressed(Key::Q)) {
-            r += shift_pressed ? 2 : 1;
+            r += 1;
         }
         if (input.keyPressed(Key::E)) {
-            r -= shift_pressed ? 2 : 1;
+            r -= 1;
         }
 
-        if (input.keyHit(Key::G)) {
-            g = 1;
-        }
+        int32_t move_amount = y;
 
-        int32_t move_amount;
-        if (x == 0 && y == 0) {
-            move_amount = 0;
-        } else if (shift_pressed) {
-            move_amount = consts::numMoveAmountBuckets - 1;
-        } else {
-            move_amount = 1;
-        }
-
-        int32_t move_angle;
-        if (x == 0 && y == 1) {
-            move_angle = 0;
-        } else if (x == 1 && y == 1) {
-            move_angle = 1;
-        } else if (x == 1 && y == 0) {
-            move_angle = 2;
-        } else if (x == 1 && y == -1) {
-            move_angle = 3;
-        } else if (x == 0 && y == -1) {
-            move_angle = 4;
-        } else if (x == -1 && y == -1) {
-            move_angle = 5;
-        } else if (x == -1 && y == 0) {
-            move_angle = 6;
-        } else if (x == -1 && y == 1) {
-            move_angle = 7;
-        } else {
-            move_angle = 0;
-        }
-
-        mgr.setAction(world_idx, agent_idx, move_amount, move_angle, r, g);
+        mgr.setAction(world_idx, agent_idx, move_amount, r);
     }, [&]() {
         if (replay_log.has_value()) {
             bool replay_finished = replayStep();

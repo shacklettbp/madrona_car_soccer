@@ -46,6 +46,7 @@ public:
     madrona::py::Tensor stepsRemainingTensor() const;
     madrona::py::Tensor rgbTensor() const;
     madrona::py::Tensor depthTensor() const;
+    madrona::py::TrainInterface trainInterface() const;
 
     // These functions are used by the viewer to control the simulation
     // with keyboard inputs in place of DNN policy actions
@@ -53,11 +54,13 @@ public:
     void setAction(int32_t world_idx,
                    int32_t agent_idx,
                    int32_t move_amount,
-                   int32_t move_angle,
-                   int32_t rotate,
-                   int32_t grab);
+                   int32_t rotate);
 
     madrona::render::RenderManager & getRenderManager();
+
+#ifdef MADRONA_CUDA_SUPPORT
+    void gpuRolloutStep(cudaStream_t strm, void **rollout_buffers);
+#endif
 
 private:
     struct Impl;

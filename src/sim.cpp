@@ -125,7 +125,7 @@ inline void carMovementSystem(Engine &engine,
 
     constexpr float move_angle_per_bucket =
         2.f * math::pi / float(consts::numTurnBuckets);
-    float move_angle = float(action.rotate-2) * move_angle_per_bucket *
+    float move_angle = float(action.rotate) * move_angle_per_bucket *
                        consts::deltaT;
     Quat rot_diff = Quat::angleAxis(move_angle, { 0.0f, 0.0f, 1.0f });
 
@@ -134,9 +134,8 @@ inline void carMovementSystem(Engine &engine,
     Vector3 fwd = rot.rotateVec({ 0.f, 1.f, 0.f });
 
     // Calculate the uninterupted displacement vector, and velocity.
-    if (action.moveAmount > 0) {
-        vel.linear += consts::carAcceleration * fwd * consts::deltaT;
-    }
+    vel.linear += (float)action.moveAmount * 
+        consts::carAcceleration * fwd * consts::deltaT;
 
     // Hack friction
     // vel.linear *= 0.95f;
@@ -467,6 +466,7 @@ inline void collectCarObservationSystem(Engine &engine,
                                         Entity e,
                                         Position pos,
                                         Rotation rot,
+                                        Velocity vel,
                                         SelfObservation &self_obs,
                                         TeamObservation &team_obs,
                                         EnemyObservation &enemy_obs,
@@ -477,6 +477,9 @@ inline void collectCarObservationSystem(Engine &engine,
     self_obs.y = globalPosObs(pos.y);
     self_obs.z = 0.f;
     self_obs.theta = angleObs(computeZAngle(rot));
+    auto vel_polar = xyToPolar(vel.linear);
+    self_obs.vel_r = vel_polar.r;
+    self_obs.vel_theta = vel_polar.theta;
 
     Quat to_view = rot.inv();
 
@@ -682,6 +685,7 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             Entity,
             Position,
             Rotation,
+            Velocity,
             SelfObservation,
             TeamObservation,
             EnemyObservation,

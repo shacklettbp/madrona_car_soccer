@@ -4,10 +4,10 @@ build-backend = "madrona-py-build"
 backend-path = ["external/madrona/py"]
 
 [project]
-name = "madrona_escape_room"
+name = "madrona_rocket_league"
 version = "0.0.1"
 
-[tool.madrona.packages.madrona_escape_room]
+[tool.madrona.packages.madrona_rocket_league]
 ext-only = true
 ext-out-dir = "build"
 
