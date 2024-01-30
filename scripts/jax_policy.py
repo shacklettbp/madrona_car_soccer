@@ -53,9 +53,6 @@ class PrefixCommon(nn.Module):
         #    )(lidar)
         # lidar = lidar.reshape(*lidar.shape[0:-2], -1)
 
-        print(self_ob.shape)
-        print(steps_remaining.shape)
-
         self_ob = jnp.concatenate([
                 self_ob,
                 steps_remaining,
@@ -188,7 +185,7 @@ def make_policy(dtype, use_simple_policy):
     policy = ActorCritic(
         backbone = backbone,
         actor = DenseLayerDiscreteActor(
-            actions_num_buckets = [4, 8, 5, 2],
+            actions_num_buckets = [3, 3],
             dtype = dtype,
         ),
         critic = DenseLayerCritic(dtype=dtype),

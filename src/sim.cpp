@@ -125,7 +125,7 @@ inline void carMovementSystem(Engine &engine,
 
     constexpr float move_angle_per_bucket =
         2.f * math::pi / float(consts::numTurnBuckets);
-    float move_angle = float(action.rotate) * move_angle_per_bucket *
+    float move_angle = float(action.rotate-1) * move_angle_per_bucket *
                        consts::deltaT;
     Quat rot_diff = Quat::angleAxis(move_angle, { 0.0f, 0.0f, 1.0f });
 
@@ -134,7 +134,7 @@ inline void carMovementSystem(Engine &engine,
     Vector3 fwd = rot.rotateVec({ 0.f, 1.f, 0.f });
 
     // Calculate the uninterupted displacement vector, and velocity.
-    vel.linear += (float)action.moveAmount * 
+    vel.linear += (float)(action.moveAmount-1) * 
         consts::carAcceleration * fwd * consts::deltaT;
 
     // Hack friction
@@ -241,13 +241,6 @@ inline void carMovementSystem(Engine &engine,
 
                     Vector3 diff = 0.5f * min_overlap * 
                         Vector3{min_overlap_axis.x, min_overlap_axis.y, 0.f};
-
-#if 0
-                    pos -= diff;
-                    vel.linear -= diff / consts::deltaT;
-                    engine.get<Position>(car) += diff;            
-                    engine.get<Velocity>(car).linear += diff / consts::deltaT;
-#endif
 
                     // TODO: Create collision data
                     CollisionData collision = {

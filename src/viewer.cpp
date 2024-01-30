@@ -195,9 +195,9 @@ int main(int argc, char *argv[])
             r -= 1;
         }
 
-        int32_t move_amount = y;
+        int32_t move_amount = y+1;
 
-        mgr.setAction(world_idx, agent_idx, move_amount, r);
+        mgr.setAction(world_idx, agent_idx, move_amount, r+1);
     }, [&]() {
         if (replay_log.has_value()) {
             bool replay_finished = replayStep();
@@ -209,6 +209,6 @@ int main(int argc, char *argv[])
 
         mgr.step();
 
-        printObs();
+        //printObs();
     }, []() {});
 }

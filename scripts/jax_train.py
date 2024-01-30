@@ -113,7 +113,7 @@ dev = jax.devices()[0]
 if args.pbt_ensemble_size != 1 or args.pbt_past_policies != 0:
     pbt_cfg = PBTConfig(
         num_teams = 2,
-        team_size = 1,
+        team_size = 3,
         num_train_policies = args.pbt_ensemble_size,
         num_past_policies = args.pbt_past_policies,
         past_policy_update_interval = 20,
@@ -136,7 +136,7 @@ else:
 
 cfg = TrainConfig(
     num_worlds = args.num_worlds,
-    num_agents_per_world = 2,
+    num_agents_per_world = 6,
     num_updates = args.num_updates,
     steps_per_update = args.steps_per_update,
     num_bptt_chunks = args.num_bptt_chunks,
