@@ -236,10 +236,8 @@ int intersectSphereWallSeg(Sphere s,
         if (diff0.dot(border_dir0) >= 0.f && diff1.dot(border_dir1) >= 0.f) {
             // There was a collision within the boundaries
             min_overlap = -dist;
-            printf("Passed full goal post intersection test\n");
             return 1;
         } else {
-            printf("Failed boundary test\n");
             return 0;
         }
     } else {

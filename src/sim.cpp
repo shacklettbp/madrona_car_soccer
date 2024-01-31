@@ -316,8 +316,6 @@ inline void checkBallGoalPosts(Engine &engine,
         float min_overlap;
         if (intersectSphereWallSeg(Sphere{ pos, consts::ballRadius },
                     s0, min_overlap)) {
-            printf("Ball intersected goal post!\n");
-
             Vector3 normal_3d = Vector3{s0.normal.x, s0.normal.y, 0.f};
 
 #if 0
@@ -357,8 +355,6 @@ inline void ballMovementSystem(Engine &engine,
         float min_overlap;
         if (intersectSphereWall(Sphere{pos, consts::ballRadius}, 
                     plane, min_overlap)) {
-            printf("Ball intersected wall!\n");
-
             Vector3 normal_3d = Vector3{plane.normal.x, plane.normal.y, 0.f};
 
 #if 0

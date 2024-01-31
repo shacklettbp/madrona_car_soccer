@@ -116,20 +116,6 @@ static Goal makeGoal(Engine &ctx,
 // All these entities persist across all episodes.
 void createPersistentEntities(Engine &ctx)
 {
-    Vector3 world_min = { -consts::worldWidth*0.5f,
-                          -consts::worldLength*0.5f,
-                          0.0f };
-
-    Vector3 world_max = { consts::worldWidth*0.5f,
-                          consts::worldLength*0.5f,
-                          0.0f };
-
-    printf("World min: %f %f %f\n",
-           world_min.x, world_min.y, world_min.z);
-
-    printf("World max: %f %f %f\n",
-           world_max.x, world_max.y, world_max.z);
-
     // Create the floor entity, just a simple static plane.
     ctx.data().floorPlane = ctx.makeRenderableEntity<PhysicsEntity>();
     setupRigidBodyEntity(
@@ -285,8 +271,6 @@ static void resetPersistentEntities(Engine &ctx)
             pos.x = ((float)car_idx+1.f) * (consts::worldWidth / ((float)consts::numCarsPerTeam+1.f)) -
                 consts::worldWidth/2.f;
 
-            printf("%f %f %f\n", pos.x, pos.y, pos.z);
-
             ctx.get<Position>(car_entity) = pos;
             ctx.get<Rotation>(car_entity) = rot;
 
@@ -295,8 +279,8 @@ static void resetPersistentEntities(Engine &ctx)
                 Vector3::zero(),
             };
             ctx.get<Action>(car_entity) = Action {
-                .moveAmount = 0,
-                .rotate = 0,
+                .moveAmount = 1,
+                .rotate = 1,
             };
             ctx.get<CarBallTouchState>(car_entity).touched = 0;
 
