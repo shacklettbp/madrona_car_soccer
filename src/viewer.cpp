@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
 {
     using namespace madEscape;
 
-    constexpr int64_t num_views = 2;
+    constexpr int64_t num_views = 6;
 
     // Read command line arguments
     uint32_t num_worlds = 1;
@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
     uint32_t num_replay_steps = 0;
     if (replay_log_path != nullptr) {
         replay_log = readReplayLog(replay_log_path);
-        num_replay_steps = replay_log->size() / (num_worlds * num_views * 4);
+        num_replay_steps = replay_log->size() / (num_worlds * num_views * 2);
     }
 
     bool enable_batch_renderer =
@@ -113,16 +113,14 @@ int main(int argc, char *argv[])
         for (uint32_t i = 0; i < num_worlds; i++) {
             for (uint32_t j = 0; j < num_views; j++) {
                 uint32_t base_idx = 0;
-                base_idx = 4 * (cur_replay_step * num_views * num_worlds +
+                base_idx = 2 * (cur_replay_step * num_views * num_worlds +
                     i * num_views + j);
 
                 int32_t move_amount = (*replay_log)[base_idx];
-                int32_t move_angle = (*replay_log)[base_idx + 1];
-                int32_t turn = (*replay_log)[base_idx + 2];
-                int32_t g = (*replay_log)[base_idx + 3];
+                int32_t turn = (*replay_log)[base_idx + 1];
 
-                printf("%d, %d: %d %d %d %d\n",
-                       i, j, move_amount, move_angle, turn, g);
+                printf("%d, %d: %d %d\n",
+                       i, j, move_amount, turn);
                 mgr.setAction(i, j, move_amount, turn);
             }
         }
