@@ -33,14 +33,9 @@ int intersectMovingSphereAABB(Sphere s,
 
     t = t_out;
 
-    if (intersected) {
-        printf("%f\n", t);
-    }
-
 #if 1
     if (s.center.x >= aabb.pMin.x && s.center.x <= aabb.pMax.x &&
         s.center.y >= aabb.pMin.y && s.center.y <= aabb.pMax.y) {
-        printf("INSIDE CAR\n");
 
         // We need to push the car out of the sphere no matter what
         Vector3 car_to_ball = s.center - (aabb.pMin + aabb.pMax) * 0.5f;

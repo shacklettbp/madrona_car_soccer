@@ -212,7 +212,6 @@ inline void carMovementSystem(Engine &engine,
                                       car_aabb, out_t, sphere_pos_out)) {
             Vector3 diff = rot.rotateVec(sphere_pos_out.normalize());
             Vector3 overlap = rot.rotateVec(sphere_pos_out - rel_ball_pos);
-            printf("Overlap: %f %f %f\n", overlap.x, overlap.y, overlap.z);
 
             CollisionData collision = {
                 .a = ball_e,
