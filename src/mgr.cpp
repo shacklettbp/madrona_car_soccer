@@ -733,7 +733,6 @@ Tensor Manager::ballTensor() const
                                Tensor::ElementType::Float32,
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
-                                   1,
                                    3,
                                });
 }
