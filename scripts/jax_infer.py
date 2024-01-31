@@ -34,6 +34,7 @@ sim = madrona_rocket_league.SimManager(
     gpu_id = args.gpu_id,
     num_worlds = args.num_worlds,
     auto_reset = True,
+    rand_seed = 5,
 )
 
 jax_gpu = jax.devices()[0].platform == 'gpu'
@@ -54,17 +55,9 @@ def host_cb(obs, actions, action_probs, values, dones, rewards):
     print(" ", np.array_str(action_probs[0][0], precision=2, suppress_small=True))
     print(" ", np.array_str(action_probs[0][1], precision=2, suppress_small=True))
 
-    print("Move Angle Probs")
+    print("Turn Probs")
     print(" ", np.array_str(action_probs[1][0], precision=2, suppress_small=True))
     print(" ", np.array_str(action_probs[1][1], precision=2, suppress_small=True))
-
-    print("Rotate Probs")
-    print(" ", np.array_str(action_probs[2][0], precision=2, suppress_small=True))
-    print(" ", np.array_str(action_probs[2][1], precision=2, suppress_small=True))
-
-    print("Grab Probs")
-    print(" ", np.array_str(action_probs[3][0], precision=2, suppress_small=True))
-    print(" ", np.array_str(action_probs[3][1], precision=2, suppress_small=True))
 
     print("Rewards:", rewards)
 
