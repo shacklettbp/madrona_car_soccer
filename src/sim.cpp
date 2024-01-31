@@ -144,7 +144,7 @@ inline void carMovementSystem(Engine &engine,
     Vector3 dx = vel.linear * consts::deltaT;
     pos += dx;
     
-#if 1
+#if 0
     Entity ball_entity = engine.data().ball;
     Position ball_pos = engine.get<Position>(ball_entity);
     Sphere ball_sphere = { Vector3::zero(), consts::ballRadius };
@@ -191,7 +191,45 @@ inline void carMovementSystem(Engine &engine,
             printf("BALL INSIDE CAR!\n");
         }
     }
+#else
+    { // Determine collision with the ball
+        Entity ball_e = engine.data().ball;
+        Vector3 ball_pos = engine.get<Position>(ball_e);
+        Vector3 ball_dx = engine.get<Velocity>(ball_e).linear * consts::deltaT;
+
+        AABB car_aabb = { -consts::agentDimensions, consts::agentDimensions };
+
+        // Transform the ball's position and velocities into the ball's frame
+        Vector3 rel_ball_pos = rot.inv().rotateVec(ball_pos - pos);
+        Vector3 rel_ball_dx = rot.inv().rotateVec(ball_dx/* - dx*/);
+
+        Sphere ball_sphere = { rel_ball_pos, consts::ballRadius };
+
+        float out_t;
+        Vector3 sphere_pos_out;
+        
+        if (intersectMovingSphereAABB(ball_sphere, rel_ball_dx,
+                                      car_aabb, out_t, sphere_pos_out)) {
+            Vector3 diff = rot.rotateVec(sphere_pos_out.normalize());
+            Vector3 overlap = rot.rotateVec(sphere_pos_out - rel_ball_pos);
+            printf("Overlap: %f %f %f\n", overlap.x, overlap.y, overlap.z);
+
+            CollisionData collision = {
+                .a = ball_e,
+                .b = e,
+                .overlap = overlap,
+                .diff = diff,
+            };
+
+            // TODO: Create collision entity
+            Loc loc = engine.makeTemporary<Collision>();
+            engine.get<CollisionData>(loc) = collision;
+
+            touch_state.touched = 1;
+        }
+    }
 #endif
+
 
     auto create_obb = [](Position pos, Rotation rot) -> OBB {
         static Vector3 car_ground_verts[4] = {
@@ -392,7 +430,7 @@ inline void collisionResolveSystem(Engine &engine,
         } else if (engine.get<DynamicEntityType>(data.a) == 
                 DynamicEntityType::Ball) {
             // A is a ball, B is a car
-            engine.get<Velocity>(data.a).linear = data.diff * 10.f;
+            engine.get<Velocity>(data.a).linear += data.diff * 10.f;
             engine.get<Position>(data.a) += data.overlap;
         } else {
             // A is a car, B is a car
