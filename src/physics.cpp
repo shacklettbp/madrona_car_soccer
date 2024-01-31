@@ -29,15 +29,48 @@ int intersectMovingSphereAABB(Sphere s,
     float t_out;
     bool intersected = e.rayIntersects(s.center, 
                                           Diag3x3::fromVec(dx).inv(),
-                                          0.0f, 1.0f, t_out);
+                                          -1.0f, 1.0f, t_out);
 
     t = t_out;
+
+    if (intersected) {
+        printf("%f\n", t);
+    }
 
     // Update the sphere's position in the case of a collision so that the sphere
     // is no longer colliding with the OBB
     s_pos_out = s.center + t * s.center;
 
     return (int)intersected;
+}
+
+int intersectSphereAABB(Sphere s,
+                       const AABB &box,
+                       Vector3 &overlap)
+{
+    if (s.center.x > box.pMin.x && s.center.x < box.pMax.x &&
+        s.center.y > box.pMin.y && s.center.y < box.pMax.y) {
+        printf("WRONG\n");
+    }
+
+    Vector3 closest = {
+        MAX(box.pMin.x, MIN(s.center.x, box.pMax.x)),
+        MAX(box.pMin.y, MIN(s.center.y, box.pMax.y)),
+        MAX(box.pMin.z, MIN(s.center.z, box.pMax.z)),
+    };
+
+    Vector3 offset = closest - s.center;
+
+    if (offset.length2() < s.radius * s.radius) {
+        // Collision
+        printf("offset = %f %f %f\n", 
+                offset.x, offset.y, offset.z);
+        overlap = (s.radius - offset.length()) * 
+            offset.normalize();
+        return 1;
+    } else {
+        return 0;
+    }
 }
 
 int intersectMovingOBBs2D(const OBB &a,

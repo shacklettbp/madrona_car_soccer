@@ -49,7 +49,7 @@ inline constexpr madrona::CountT numTurnBuckets = 5;
 inline constexpr madrona::CountT numLidarSamples = 30;
 
 // Time (seconds) per step
-inline constexpr float deltaT = 0.016f;
+inline constexpr float deltaT = 0.05f;
 
 // Speed at which doors raise and lower
 inline constexpr float doorSpeed = 30.f;

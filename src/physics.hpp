@@ -33,6 +33,10 @@ int intersectMovingSphereAABB(Sphere s,
                               float &t,
                               madrona::math::Vector3 &s_pos_out);
 
+int intersectSphereAABB(Sphere s,
+                       const madrona::math::AABB &box,
+                       madrona::math::Vector3 &overlap);
+
 // We aren't doing precise collision detection so we just care to see whether
 // a collision has happened at all.
 int intersectMovingOBBs2D(const OBB &a,

@@ -142,17 +142,15 @@ inline void carMovementSystem(Engine &engine,
     
     // This is the uninterrupted displacement vector given no collisions.
     Vector3 dx = vel.linear * consts::deltaT;
-
+    pos += dx;
     
-
-    // First check collision with the ball
+#if 1
     Entity ball_entity = engine.data().ball;
     Position ball_pos = engine.get<Position>(ball_entity);
-    Velocity ball_vel = engine.get<Velocity>(ball_entity);
-
-
-    Vector3 ball_dx = ball_vel.linear * consts::deltaT;
     Sphere ball_sphere = { Vector3::zero(), consts::ballRadius };
+
+    Velocity ball_vel = engine.get<Velocity>(ball_entity);
+    Vector3 ball_dx = ball_vel.linear * consts::deltaT;
 
     Vector3 car_ball_rel = rot.inv().rotateVec(pos - ball_pos);
     AABB car_aabb = { car_ball_rel - consts::agentDimensions,
@@ -172,11 +170,6 @@ inline void carMovementSystem(Engine &engine,
         Vector3 diff = rot.rotateVec(out_t * rel_dx - car_ball_rel);
         Vector3 overlap = rot.rotateVec(sphere_pos_out);
 
-#if 0
-        engine.get<Velocity>(ball_entity).linear = diff * 10.0f;
-        engine.get<Position>(ball_entity) += overlap;
-#endif
-
         CollisionData collision = {
             .a = ball_entity,
             .b = e,
@@ -189,17 +182,16 @@ inline void carMovementSystem(Engine &engine,
         engine.get<CollisionData>(loc) = collision;
 
         touch_state.touched = 1;
+    } else {
+        // Possible, that the ball is inside the car
+        if (ball_sphere.center.x >= car_aabb.pMin.x - ball_sphere.radius &&
+            ball_sphere.center.x <= car_aabb.pMax.x + ball_sphere.radius &&
+            ball_sphere.center.y >= car_aabb.pMin.y - ball_sphere.radius &&
+            ball_sphere.center.y <= car_aabb.pMax.y + ball_sphere.radius) {
+            printf("BALL INSIDE CAR!\n");
+        }
     }
-
-    // For now, we just naively loop through the other agents, and then 
-    // the ball to determine where collisions have happened.
-    //
-    // (TODO) Add some very simple space partitioning system to make this
-    // faster when there are multiple cars.
-    
-
-    pos += dx;
-
+#endif
 
     auto create_obb = [](Position pos, Rotation rot) -> OBB {
         static Vector3 car_ground_verts[4] = {
@@ -422,7 +414,7 @@ inline void velocityCorrectSystem(Engine &engine,
     (void)engine;
 
     // Friction hack
-    vel.linear *= 0.95f;
+    vel.linear *= 0.9f;
 }
 
 static inline float angleObs(float v) { return v / math::pi; }
