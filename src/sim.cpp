@@ -124,7 +124,7 @@ inline void carMovementSystem(Engine &engine,
     touch_state.touched = 0;
 
     constexpr float move_angle_per_bucket =
-        2.f * math::pi / float(consts::numTurnBuckets);
+        3.f * math::pi / float(consts::numTurnBuckets);
     float move_angle = float(action.rotate-1) * move_angle_per_bucket *
                        consts::deltaT;
     Quat rot_diff = Quat::angleAxis(move_angle, { 0.0f, 0.0f, 1.0f });
@@ -511,11 +511,14 @@ inline void collectCarObservationSystem(Engine &engine,
 
             Vector3 other_pos = engine.get<Position>(other_player);
             Rotation other_rot = engine.get<Rotation>(other_player);
+            Vector3 other_vel = engine.get<Velocity>(other_player).linear;
+
             Vector3 to_other = other_pos - pos;
 
             OtherObservation &obs = team_obs.obs[obs_idx];
             obs.polar = xyToPolar(to_view.rotateVec(to_other));
             obs.o_theta = angleObs(computeZAngle(other_rot));
+            obs.vel = xyToPolar(other_vel);
 
             ++obs_idx;
         }
@@ -528,19 +531,24 @@ inline void collectCarObservationSystem(Engine &engine,
 
         Vector3 other_pos = engine.get<Position>(other_player);
         Rotation other_rot = engine.get<Rotation>(other_player);
+        Vector3 other_vel = engine.get<Velocity>(other_player).linear;
+
         Vector3 to_other = other_pos - pos;
 
         OtherObservation &obs = enemy_obs.obs[i];
         obs.polar = xyToPolar(to_view.rotateVec(to_other));
         obs.o_theta = angleObs(computeZAngle(other_rot));
+        obs.vel = xyToPolar(other_vel);
     }
 
     Entity ball_entity = engine.data().ball;
     Vector3 ball_pos = engine.get<Position>(ball_entity);
+    Vector3 ball_vel = engine.get<Velocity>(ball_entity).linear;
 
     ball_obs.x = ball_pos.x / consts::worldLength;
     ball_obs.y = ball_pos.y / consts::worldLength;
     ball_obs.z = 0.f;
+    ball_obs.vel = xyToPolar(ball_vel);
 }
 
 inline void collectBallObservationSystem(Engine &engine,
