@@ -3,6 +3,7 @@ from jax import lax, random, numpy as jnp
 from jax.experimental import checkify
 import flax
 from flax import linen as nn
+from flax.core import FrozenDict
 
 import argparse
 from functools import partial
@@ -33,19 +34,31 @@ def assert_valid_input(tensor):
     #checkify.check(jnp.isnan(tensor).any() == False, "NaN!")
     #checkify.check(jnp.isinf(tensor).any() == False, "Inf!")
 
-class PolicyLSTM(nn.Module):
-    num_hidden_channels: int
-    num_layers: int
-    dtype: jnp.dtype
+class PolicyRNN(nn.Module):
+    rnn: nn.Module
+    norm: nn.Module
 
-    def setup(self):
-        self.lstm = LSTM(
-            num_hidden_channels = self.num_hidden_channels,
-            num_layers = self.num_layers,
-            dtype = self.dtype,
+    @staticmethod
+    def create(num_hidden_channels, num_layers, dtype, rnn_cls = LSTM):
+        return PolicyRNN(
+            rnn = rnn_cls(
+                num_hidden_channels = num_hidden_channels,
+                num_layers = num_layers,
+                dtype = dtype,
+            ),
+            norm = LayerNorm(dtype=dtype),
         )
 
-        self.layernorm = LayerNorm(dtype=self.dtype)
+    @nn.nowrap
+    def init_recurrent_state(self, N):
+        return self.rnn.init_recurrent_state(N)
+
+    @nn.nowrap
+    def clear_recurrent_state(self, rnn_states, should_clear):
+        return self.rnn.clear_recurrent_state(rnn_states, should_clear)
+
+    def setup(self):
+        pass
 
     def __call__(
         self,
@@ -53,7 +66,8 @@ class PolicyLSTM(nn.Module):
         x,
         train,
     ):
-        return self.layernorm(self.lstm(cur_hiddens, x, train))
+        out, new_hiddens = self.rnn(cur_hiddens, x, train)
+        return self.norm(out), new_hiddens
 
     def sequence(
         self,
@@ -62,8 +76,8 @@ class PolicyLSTM(nn.Module):
         seq_x,
         train,
     ):
-        return self.layernorm(
-            self.lstm.sequence(start_hiddens, seq_ends, seq_x, train))
+        return self.norm(
+            self.rnn.sequence(start_hiddens, seq_ends, seq_x, train))
 
 class PrefixCommon(nn.Module):
     dtype: jnp.dtype
@@ -164,7 +178,7 @@ class CriticNet(nn.Module):
 def make_policy(dtype):
     actor_encoder = RecurrentBackboneEncoder(
         net = ActorNet(dtype, use_simple=False),
-        rnn = PolicyLSTM(
+        rnn = PolicyRNN.create(
             num_hidden_channels = 256,
             num_layers = 1,
             dtype = dtype,
@@ -173,7 +187,7 @@ def make_policy(dtype):
 
     critic_encoder = RecurrentBackboneEncoder(
         net = CriticNet(dtype, use_simple=False),
-        rnn = PolicyLSTM(
+        rnn = PolicyRNN.create(
             num_hidden_channels = 256,
             num_layers = 1,
             dtype = dtype,
