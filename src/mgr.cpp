@@ -733,8 +733,7 @@ Tensor Manager::ballTensor() const
                                Tensor::ElementType::Float32,
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
-                                   1,
-                                   3,
+                                   5,
                                });
 }
 
@@ -745,7 +744,7 @@ Tensor Manager::teamObservationTensor() const
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
                                    consts::numCarsPerTeam - 1,
-                                   3,
+                                   5,
                                });
 }
 
@@ -756,7 +755,7 @@ Tensor Manager::enemyObservationTensor() const
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
                                    consts::numCarsPerTeam,
-                                   3,
+                                   5,
                                });
 }
 

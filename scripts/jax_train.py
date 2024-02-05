@@ -16,7 +16,6 @@ from madrona_learn import (
     TrainConfig, CustomMetricConfig, PPOConfig, PBTConfig,
 )
 
-from madrona_learn.rnn import LSTM
 from jax_policy import make_policy
 
 madrona_learn.init(0.7)
@@ -32,6 +31,7 @@ arg_parser.add_argument('--num-worlds', type=int, required=True)
 arg_parser.add_argument('--num-updates', type=int, required=True)
 arg_parser.add_argument('--steps-per-update', type=int, default=40)
 arg_parser.add_argument('--num-bptt-chunks', type=int, default=8)
+arg_parser.add_argument('--num-minibatches', type=int, default=2)
 
 arg_parser.add_argument('--lr', type=float, default=1e-4)
 arg_parser.add_argument('--gamma', type=float, default=0.998)
@@ -117,8 +117,8 @@ if args.pbt_ensemble_size != 1 or args.pbt_past_policies != 0:
         num_train_policies = args.pbt_ensemble_size,
         num_past_policies = args.pbt_past_policies,
         past_policy_update_interval = 20,
-        self_play_portion = 0.75,
-        cross_play_portion = 0.0,
+        self_play_portion = 0.50,
+        cross_play_portion = 0.25,
         past_play_portion = 0.25,
         #self_play_portion = 0.8,
         #cross_play_portion = 0.05,
@@ -144,7 +144,7 @@ cfg = TrainConfig(
     gamma = args.gamma,
     gae_lambda = 0.95,
     algo = PPOConfig(
-        num_mini_batches = 2,
+        num_mini_batches = args.num_minibatches,
         clip_coef = 0.2,
         value_loss_coef = args.value_loss_coef,
         entropy_coef = args.entropy_loss_coef,
@@ -159,7 +159,7 @@ cfg = TrainConfig(
     seed = 5,
 )
 
-policy, obs_preprocess = make_policy(dtype, True)
+policy, obs_preprocess = make_policy(dtype)
 
 if args.restore:
     restore_ckpt = os.path.join(args.ckpt_dir, str(args.restore))

@@ -53,11 +53,6 @@ struct Done {
     int32_t v;
 };
 
-// Global position of the ball
-struct BallObservation {
-    float x, y, z;
-};
-
 // Observation state for the current agent.
 // Positions are rescaled to the bounds of the play area to assist training.
 struct SelfObservation {
@@ -75,12 +70,20 @@ struct PolarObservation {
     float r, theta;
 };
 
+// Global position of the ball
+struct BallObservation {
+    float x, y, z;
+    PolarObservation vel;
+};
+
 struct OtherObservation {
     // Used to get the relative position/direction from current agent.
     PolarObservation polar;
-    
     // The other's facing direction.
     float o_theta;
+
+    // Velocity direction and magnitude
+    PolarObservation vel;
 };
 
 struct TeamObservation {

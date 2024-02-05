@@ -128,7 +128,7 @@ inline void carMovementSystem(Engine &engine,
     touch_state.touched = 0;
 
     constexpr float move_angle_per_bucket =
-        2.f * math::pi / float(consts::numTurnBuckets);
+        3.f * math::pi / float(consts::numTurnBuckets);
     float move_angle = float(action.rotate-1) * move_angle_per_bucket *
                        consts::deltaT;
     Quat rot_diff = Quat::angleAxis(move_angle, { 0.0f, 0.0f, 1.0f });
@@ -148,50 +148,42 @@ inline void carMovementSystem(Engine &engine,
     Vector3 dx = vel.linear * consts::deltaT;
     pos += dx;
     
-#if 0
-    Entity ball_entity = engine.data().ball;
-    Position ball_pos = engine.get<Position>(ball_entity);
-    Sphere ball_sphere = { Vector3::zero(), consts::ballRadius };
-
-    Velocity ball_vel = engine.get<Velocity>(ball_entity);
-    Vector3 ball_dx = ball_vel.linear * consts::deltaT;
-
-    Vector3 car_ball_rel = rot.inv().rotateVec(pos - ball_pos);
-    AABB car_aabb = { car_ball_rel - consts::agentDimensions,
-                      car_ball_rel + consts::agentDimensions };
-
-    Vector3 rel_dx = rot.inv().rotateVec(dx - ball_dx);
-
-    float out_t;
-    Vector3 sphere_pos_out;
-    int intersect = intersectMovingSphereAABB(
-        ball_sphere, rel_dx, 
-        car_aabb, out_t, sphere_pos_out);
-
-    if (intersect) {
-        // Take the difference of the sphere's center and the car's
-        // center at impact.
-        Vector3 diff = rot.rotateVec(out_t * rel_dx - car_ball_rel);
-        Vector3 overlap = rot.rotateVec(sphere_pos_out);
-
-        CollisionData collision = {
-            .a = ball_entity,
-            .b = e,
-            .overlap = overlap,
-            .diff = diff,
-        };
-
-        // TODO: Create collision entity
-        Loc loc = engine.makeTemporary<Collision>();
-        engine.get<CollisionData>(loc) = collision;
-
-        touch_state.touched = 1;
-    }
-#else
     { // Determine collision with the ball
+        Entity ball_e = engine.data().ball;
+        Vector3 ball_pos = engine.get<Position>(ball_e);
+        Vector3 ball_dx = engine.get<Velocity>(ball_e).linear * consts::deltaT;
 
+        AABB car_aabb = { -consts::agentDimensions, consts::agentDimensions };
+
+        // Transform the ball's position and velocities into the ball's frame
+        Vector3 rel_ball_pos = rot.inv().rotateVec(ball_pos - pos);
+        Vector3 rel_ball_dx = rot.inv().rotateVec(ball_dx/* - dx*/);
+
+        Sphere ball_sphere = { rel_ball_pos, consts::ballRadius };
+
+        float out_t;
+        Vector3 sphere_pos_out;
+        
+        if (intersectMovingSphereAABB(ball_sphere, rel_ball_dx,
+                                      car_aabb, out_t, sphere_pos_out)) {
+            Vector3 diff = rot.rotateVec(sphere_pos_out.normalize());
+            Vector3 overlap = rot.rotateVec(sphere_pos_out - rel_ball_pos);
+
+            CollisionData collision = {
+                .a = ball_e,
+                .b = e,
+                .overlap = overlap,
+                .diff = diff,
+            };
+
+            // TODO: Create collision entity
+            Loc loc = engine.makeTemporary<Collision>();
+            engine.get<CollisionData>(loc) = collision;
+
+            touch_state.touched = 1;
+        }
     }
-#endif
+
 
     auto create_obb = [](Position pos, Rotation rot) -> OBB {
         static Vector3 car_ground_verts[4] = {
@@ -395,7 +387,7 @@ inline void collisionResolveSystem(Engine &engine,
         } else if (engine.get<DynamicEntityType>(data.a) == 
                 DynamicEntityType::Ball) {
             // A is a ball, B is a car
-            engine.get<Velocity>(data.a).linear = data.diff * 10.f;
+            engine.get<Velocity>(data.a).linear += data.diff * 10.f;
             engine.get<Position>(data.a) += data.overlap;
         } else {
             // A is a car, B is a car
@@ -477,11 +469,14 @@ inline void collectCarObservationSystem(Engine &engine,
 
             Vector3 other_pos = engine.get<Position>(other_player);
             Rotation other_rot = engine.get<Rotation>(other_player);
+            Vector3 other_vel = engine.get<Velocity>(other_player).linear;
+
             Vector3 to_other = other_pos - pos;
 
             OtherObservation &obs = team_obs.obs[obs_idx];
             obs.polar = xyToPolar(to_view.rotateVec(to_other));
             obs.o_theta = angleObs(computeZAngle(other_rot));
+            obs.vel = xyToPolar(other_vel);
 
             ++obs_idx;
         }
@@ -494,19 +489,24 @@ inline void collectCarObservationSystem(Engine &engine,
 
         Vector3 other_pos = engine.get<Position>(other_player);
         Rotation other_rot = engine.get<Rotation>(other_player);
+        Vector3 other_vel = engine.get<Velocity>(other_player).linear;
+
         Vector3 to_other = other_pos - pos;
 
         OtherObservation &obs = enemy_obs.obs[i];
         obs.polar = xyToPolar(to_view.rotateVec(to_other));
         obs.o_theta = angleObs(computeZAngle(other_rot));
+        obs.vel = xyToPolar(other_vel);
     }
 
     Entity ball_entity = engine.data().ball;
     Vector3 ball_pos = engine.get<Position>(ball_entity);
+    Vector3 ball_vel = engine.get<Velocity>(ball_entity).linear;
 
     ball_obs.x = ball_pos.x / consts::worldLength;
     ball_obs.y = ball_pos.y / consts::worldLength;
     ball_obs.z = 0.f;
+    ball_obs.vel = xyToPolar(ball_vel);
 }
 
 inline void collectBallObservationSystem(Engine &engine,
@@ -562,6 +562,8 @@ inline void rewardSystem(Engine &engine,
     // 3) Ball was hit by the car
     if (touch_state.touched) {
         reward += 1.f;
+
+        printf("Team %d touched\n", team_state.teamIdx);
     }
 
     // 4) Ball is close to enemy's goal / past the goal
@@ -584,6 +586,8 @@ inline void rewardSystem(Engine &engine,
         if (ball_gs.state == BallGoalState::State::InGoal &&
             ball_gs.data == 0) {
             reward += 10.f;
+
+            printf("Team 0 Scored!\n");
         }
     } else {
         // Less positive is better
@@ -601,6 +605,8 @@ inline void rewardSystem(Engine &engine,
         if (ball_gs.state == BallGoalState::State::InGoal &&
             ball_gs.data == 1) {
             reward += 10.f;
+
+            printf("Team 1 Scored!\n");
         }
     }
 

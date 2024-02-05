@@ -3,6 +3,7 @@ from jax import lax, random, numpy as jnp
 from jax.experimental import checkify
 import flax
 from flax import linen as nn
+from flax.core import FrozenDict
 
 import argparse
 from functools import partial
@@ -28,10 +29,55 @@ def assert_valid_input(tensor):
     checkify.check(jnp.isnan(tensor).any() == False, "NaN!")
     checkify.check(jnp.isinf(tensor).any() == False, "Inf!")
 
-def pytorch_initializer():
-    scale = 2 / (1 + math.sqrt(2) ** 2)
-    return jax.nn.initializers.variance_scaling(
-        scale, mode='fan_in', distribution='normal')
+def assert_valid_input(tensor):
+    return None
+    #checkify.check(jnp.isnan(tensor).any() == False, "NaN!")
+    #checkify.check(jnp.isinf(tensor).any() == False, "Inf!")
+
+class PolicyRNN(nn.Module):
+    rnn: nn.Module
+    norm: nn.Module
+
+    @staticmethod
+    def create(num_hidden_channels, num_layers, dtype, rnn_cls = LSTM):
+        return PolicyRNN(
+            rnn = rnn_cls(
+                num_hidden_channels = num_hidden_channels,
+                num_layers = num_layers,
+                dtype = dtype,
+            ),
+            norm = LayerNorm(dtype=dtype),
+        )
+
+    @nn.nowrap
+    def init_recurrent_state(self, N):
+        return self.rnn.init_recurrent_state(N)
+
+    @nn.nowrap
+    def clear_recurrent_state(self, rnn_states, should_clear):
+        return self.rnn.clear_recurrent_state(rnn_states, should_clear)
+
+    def setup(self):
+        pass
+
+    def __call__(
+        self,
+        cur_hiddens,
+        x,
+        train,
+    ):
+        out, new_hiddens = self.rnn(cur_hiddens, x, train)
+        return self.norm(out), new_hiddens
+
+    def sequence(
+        self,
+        start_hiddens,
+        seq_ends,
+        seq_x,
+        train,
+    ):
+        return self.norm(
+            self.rnn.sequence(start_hiddens, seq_ends, seq_x, train))
 
 class PrefixCommon(nn.Module):
     dtype: jnp.dtype
@@ -42,144 +88,118 @@ class PrefixCommon(nn.Module):
         obs,
         train,
     ):
-        obs, self_ob = obs.pop('self')
-        obs, steps_remaining = obs.pop('stepsRemaining')
-
-        #lidar = nn.Conv(
-        #        features=1,
-        #        kernel_size=(lidar.shape[-2],),
-        #        padding='CIRCULAR',
-        #        dtype=self.dtype,
-        #    )(lidar)
-        # lidar = lidar.reshape(*lidar.shape[0:-2], -1)
-
-        self_ob = jnp.concatenate([
-                self_ob,
-                steps_remaining,
-            ], axis=-1)
-
-        return obs.copy({
-            'self': self_ob, 
-        })
-        
-
-class PrefixCommonSimpleAdapter(nn.Module):
-    dtype: jnp.dtype
-
-    @nn.compact
-    def __call__(
-        self,
-        obs,
-        train,
-    ):
-        xs = PrefixCommon(dtype = self.dtype)(obs, train)
-
-        xs, self = xs.pop('self')
-        xs = jax.tree_map(
-            lambda x: x.reshape(*x.shape[:-2], -1), xs)
-
-        xs = xs.copy({'self': self})
-
-        flattened, _ = jax.tree_util.tree_flatten(xs)
-
-        return jnp.concatenate(flattened, axis=-1)
-
-
-class ProcessObsMLP(nn.Module):
-    dtype: jnp.dtype
-
-    @nn.compact
-    def __call__(
-        self,
-        obs,
-        train,
-    ):
-        obs = jax.tree_map(lambda x: jnp.asarray(x, dtype=self.dtype), obs)
         jax.tree_map(lambda x: assert_valid_input(x), obs)
 
-        obs = jax.tree_map(
-            lambda o: o.reshape(o.shape[0], -1), obs)
+        obs, self_ob = obs.pop('self')
+        obs, ball_ob = obs.pop('ball')
+        obs, steps_remaining_ob = obs.pop('stepsRemaining')
 
-        obs, steps_remaining = obs.pop('stepsRemaining')
-        steps_remaining = steps_remaining / 200
+        self_ob = jnp.concatenate([
+            self_ob,
+            ball_ob,
+            steps_remaining_ob,
+        ], axis=-1)
+        
+        obs, team_ob = obs.pop('team')
+        obs, enemy_ob = obs.pop('enemy')
+        
+        assert len(obs) == 0
 
-        processed_obs = obs.copy({
-            'stepsRemaining': steps_remaining,
+        return FrozenDict({
+            'self': self_ob, 
+            'team': team_ob,
+            'enemy': enemy_ob,
         })
 
-        flattened, _ = jax.tree_util.tree_flatten(processed_obs)
 
-        return jnp.concatenate(flattened, axis=-1)
-
-
-class PolicyLSTM(nn.Module):
-    num_hidden_channels: int
-    num_layers: int
+class SimpleNet(nn.Module):
     dtype: jnp.dtype
 
-    def setup(self):
-        self.lstm = LSTM(
-            num_hidden_channels = self.num_hidden_channels,
-            num_layers = self.num_layers,
-            dtype = self.dtype,
-        )
-
-        self.layernorm = LayerNorm(dtype=self.dtype)
-
+    @nn.compact
     def __call__(
         self,
-        cur_hiddens,
-        x,
+        obs,
         train,
     ):
-        return self.layernorm(self.lstm(cur_hiddens, x, train))
+        num_batch_dims = len(obs['self'].shape) - 1
+        obs = jax.tree_map(
+            lambda o: o.reshape(*o.shape[0:num_batch_dims], -1), obs)
 
-    def sequence(
-        self,
-        start_hiddens,
-        seq_ends,
-        seq_x,
-        train,
-    ):
-        return self.layernorm(
-            self.lstm.sequence(start_hiddens, seq_ends, seq_x, train))
+        flattened, _ = jax.tree_util.tree_flatten(obs)
+        flattened = jnp.concatenate(flattened, axis=-1)
 
-def make_policy(dtype, use_simple_policy):
-
-    if use_simple_policy:
-        prefix = PrefixCommonSimpleAdapter(dtype)
-        #prefix = ProcessObsMLP(dtype)
-        encoder = madrona_learn.BackboneEncoder(
-            net = MLP(
+        return MLP(
                 num_channels = 256,
                 num_layers = 3,
-                dtype = dtype,
-                weight_init = pytorch_initializer(),
-            ),
-            #rnn = LSTM(
-            #    num_hidden_channels = 256,
-            #    num_layers = 1,
-            #    dtype = dtype,
-            #),
-        )
-    else:
-        prefix = PrefixCommon(dtype)
-        encoder = madrona_learn.BackboneEncoder(
-            net = EntitySelfAttentionNet(
-                num_embed_channels = 128,
-                num_heads = 4,
-                dtype = dtype,
-            ),
-            #rnn = PolicyLSTM(
-            #    num_hidden_channels = 256,
-            #    num_layers = 1,
-            #    dtype = dtype,
-            #),
-        )
+                dtype = self.dtype,
+            )(flattened, train)
 
-    backbone = madrona_learn.BackboneShared(
-        prefix = prefix,
-        encoder = encoder,
+class ActorNet(nn.Module):
+    dtype: jnp.dtype
+    use_simple: bool
+
+    @nn.compact
+    def __call__(
+        self,
+        obs,
+        train,
+    ):
+        if self.use_simple:
+            return SimpleNet(dtype=self.dtype)(obs, train)
+        else:
+            return EntitySelfAttentionNet(
+                    num_embed_channels = 128,
+                    num_out_channels = 256,
+                    num_heads = 4,
+                    dtype = self.dtype,
+                )(obs, train=train)
+
+
+class CriticNet(nn.Module):
+    dtype: jnp.dtype
+    use_simple: bool
+
+    @nn.compact
+    def __call__(
+        self,
+        obs,
+        train,
+    ):
+        if self.use_simple:
+            return SimpleNet(dtype=self.dtype)(obs, train)
+        else:
+            return EntitySelfAttentionNet(
+                    num_embed_channels = 128,
+                    num_out_channels = 256,
+                    num_heads = 4,
+                    dtype = self.dtype,
+                )(obs, train=train)
+
+def make_policy(dtype):
+    actor_encoder = RecurrentBackboneEncoder(
+        net = ActorNet(dtype, use_simple=False),
+        rnn = PolicyRNN.create(
+            num_hidden_channels = 256,
+            num_layers = 1,
+            dtype = dtype,
+        ),
+    )
+
+    critic_encoder = RecurrentBackboneEncoder(
+        net = CriticNet(dtype, use_simple=False),
+        rnn = PolicyRNN.create(
+            num_hidden_channels = 256,
+            num_layers = 1,
+            dtype = dtype,
+        ),
+    )
+
+    backbone = BackboneSeparate(
+        prefix = PrefixCommon(
+            dtype = dtype,
+        ),
+        actor_encoder = actor_encoder,
+        critic_encoder = critic_encoder,
     )
 
     policy = ActorCritic(
@@ -194,9 +214,8 @@ def make_policy(dtype, use_simple_policy):
     obs_preprocess = ObservationsEMANormalizer.create(
         decay = 0.99999,
         dtype = dtype,
+        prep_fns = {},
+        skip_normalization = {},
     )
-
-    #obs_preprocess = ObservationsCaster(dtype=dtype)
-    #obs_preprocess = None
 
     return policy, obs_preprocess

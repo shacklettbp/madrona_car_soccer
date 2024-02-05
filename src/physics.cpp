@@ -29,13 +29,42 @@ int intersectMovingSphereAABB(Sphere s,
     float t_out;
     bool intersected = e.rayIntersects(s.center, 
                                           Diag3x3::fromVec(dx).inv(),
-                                          -1.0f, 1.0f, t_out);
+                                          0.0f, 1.0f, t_out);
 
     t = t_out;
 
-    if (intersected) {
-        printf("%f\n", t);
+#if 1
+    if (s.center.x >= aabb.pMin.x && s.center.x <= aabb.pMax.x &&
+        s.center.y >= aabb.pMin.y && s.center.y <= aabb.pMax.y) {
+
+        // We need to push the car out of the sphere no matter what
+        Vector3 car_to_ball = s.center - (aabb.pMin + aabb.pMax) * 0.5f;
+        Vector3 aabb_dim = (aabb.pMax - aabb.pMin) * 0.5f;
+
+        Vector2 car_to_ball_norm = { car_to_ball.x / aabb_dim.x,
+                                     car_to_ball.y / aabb_dim.y };
+
+        int largest_mag_idx = 
+            abs(car_to_ball_norm.x) > abs(car_to_ball_norm.y) ? 0 : 1;
+
+        float comp_radius[2] = {
+            0.5f * (aabb.pMax.x - aabb.pMin.x),
+            0.5f * (aabb.pMax.y - aabb.pMin.y),
+        };
+
+        float car_to_ball_dx[2] = {
+            car_to_ball.x, car_to_ball.y
+        };
+
+        Vector3 ball_new_pos = s.center + 
+            abs(comp_radius[largest_mag_idx] / car_to_ball_dx[largest_mag_idx]) * 
+            car_to_ball;
+
+        s_pos_out = ball_new_pos;
+
+        return 1;
     }
+#endif
 
     // Update the sphere's position in the case of a collision so that the sphere
     // is no longer colliding with the OBB
