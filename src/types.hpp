@@ -207,7 +207,21 @@ struct CarBallTouchState {
 
 /* ECS Archetypes for the game */
 
-enum class BallGoalState {
+struct BallGoalState {
+    enum class State {
+        None,
+        InGoal,
+        NotInGoal,
+        NumStates
+    };
+
+    State state;
+
+    // If InGoal, specify which goal it's in.
+    int data;
+};
+
+enum class GoalState {
     None,
     InGoal,
     NotInGoal,

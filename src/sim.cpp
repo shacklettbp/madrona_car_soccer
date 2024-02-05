@@ -103,11 +103,15 @@ inline void resetSystem(Engine &ctx, WorldReset &reset)
         }
     }
 
+    BallGoalState &ball_gs = ctx.get<BallGoalState>(ctx.data().ball);
+
     if (should_reset != 0) {
         reset.reset = 0;
 
         cleanupWorld(ctx);
         initWorld(ctx);
+    } else if (ball_gs.state == BallGoalState::State::InGoal) {
+        placeEntities(ctx);
     }
 }
 
@@ -144,7 +148,7 @@ inline void carMovementSystem(Engine &engine,
     Vector3 dx = vel.linear * consts::deltaT;
     pos += dx;
     
-#if 1
+#if 0
     Entity ball_entity = engine.data().ball;
     Position ball_pos = engine.get<Position>(ball_entity);
     Sphere ball_sphere = { Vector3::zero(), consts::ballRadius };
@@ -182,14 +186,10 @@ inline void carMovementSystem(Engine &engine,
         engine.get<CollisionData>(loc) = collision;
 
         touch_state.touched = 1;
-    } else {
-        // Possible, that the ball is inside the car
-        if (ball_sphere.center.x >= car_aabb.pMin.x - ball_sphere.radius &&
-            ball_sphere.center.x <= car_aabb.pMax.x + ball_sphere.radius &&
-            ball_sphere.center.y >= car_aabb.pMin.y - ball_sphere.radius &&
-            ball_sphere.center.y <= car_aabb.pMax.y + ball_sphere.radius) {
-            printf("BALL INSIDE CAR!\n");
-        }
+    }
+#else
+    { // Determine collision with the ball
+
     }
 #endif
 
@@ -310,11 +310,6 @@ inline void checkBallGoalPosts(Engine &engine,
                     s0, min_overlap)) {
             Vector3 normal_3d = Vector3{s0.normal.x, s0.normal.y, 0.f};
 
-#if 0
-            pos += normal_3d * min_overlap;
-            vel.linear = reflect(vel.linear, normal_3d);
-#endif
-
             CollisionData collision = {
                 .a = e,
                 .b = Entity::none(),
@@ -325,6 +320,14 @@ inline void checkBallGoalPosts(Engine &engine,
             Loc loc = engine.makeTemporary<Collision>();
             engine.get<CollisionData>(loc) = collision;
         }
+    }
+
+    if (goal_idx == 0 && pos.y < -consts::worldLength*0.5f) {
+        ball_gs.state = BallGoalState::State::InGoal;
+        ball_gs.data = 0;
+    } else if (goal_idx == 1 && pos.y > consts::worldLength*0.5f) {
+        ball_gs.state = BallGoalState::State::InGoal;
+        ball_gs.data = 1;
     }
 }
 
@@ -536,6 +539,7 @@ inline void rewardSystem(Engine &engine,
     float reward = 0.f;
 
     Entity ball_entity = engine.data().ball;
+    BallGoalState &ball_gs = engine.get<BallGoalState>(ball_entity);
     Position ball_pos = engine.get<Position>(ball_entity);
 
     Vector3 diff = ball_pos - pos;
@@ -576,6 +580,11 @@ inline void rewardSystem(Engine &engine,
             reward += 0.1f * ((1.f / (abs(ball_diff_to_target + 1.f))) - 
                     1.f / (abs(ball_diff_to_center) + 1.f));
         }
+
+        if (ball_gs.state == BallGoalState::State::InGoal &&
+            ball_gs.data == 0) {
+            reward += 10.f;
+        }
     } else {
         // Less positive is better
         float target_goal_y = consts::worldLength/2.f;
@@ -587,6 +596,11 @@ inline void rewardSystem(Engine &engine,
         } else {
             reward += 0.1f * ((1.f / (abs(ball_diff_to_target + 1.f))) - 
                     1.f / (abs(ball_diff_to_center) + 1.f));
+        }
+
+        if (ball_gs.state == BallGoalState::State::InGoal &&
+            ball_gs.data == 1) {
+            reward += 10.f;
         }
     }
 

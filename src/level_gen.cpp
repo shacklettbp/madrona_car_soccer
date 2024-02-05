@@ -222,7 +222,71 @@ void createPersistentEntities(Engine &ctx)
     ctx.get<ObjectID>(ball) = ObjectID { (int32_t)SimObject::Sphere };
     ctx.get<EntityType>(ball) = EntityType::Ball;
     ctx.get<DynamicEntityType>(ball) = DynamicEntityType::Ball;
-    ctx.get<BallGoalState>(ball) = BallGoalState::NotInGoal;
+    ctx.get<BallGoalState>(ball).state = BallGoalState::State::NotInGoal;
+}
+
+void placeEntities(Engine &ctx)
+{
+    for (CountT team_idx = 0; team_idx < 2; ++team_idx) {
+        Team &team = ctx.data().teams[team_idx];
+
+        for (CountT car_idx = 0; car_idx < consts::numCarsPerTeam; ++car_idx) {
+            Entity car_entity = team.players[car_idx];
+
+            // Place the agents near the starting wall
+            Vector3 pos { 0.f, 0.f, consts::agentDimensions.z };
+            Quat rot{};
+
+            if (team_idx % 2 == 0) {
+                pos.x = 0.0f;
+                pos.y = consts::worldLength / 2.5f;
+
+                rot = Quat::angleAxis(
+                    math::pi,
+                    math::up);
+            } else {
+                pos.x = 0.0f;
+                pos.y = -consts::worldLength / 2.5f;
+
+                rot = Quat::angleAxis(
+                    0.0f,
+                    math::up);
+            }
+
+            // Set the position's x component
+            pos.x = ((float)car_idx+1.f) * (consts::worldWidth / ((float)consts::numCarsPerTeam+1.f)) -
+                consts::worldWidth/2.f;
+
+            ctx.get<Position>(car_entity) = pos;
+            ctx.get<Rotation>(car_entity) = rot;
+
+            ctx.get<Velocity>(car_entity) = {
+                Vector3::zero(),
+                Vector3::zero(),
+            };
+            ctx.get<Action>(car_entity) = Action {
+                .moveAmount = 1,
+                .rotate = 1,
+            };
+            ctx.get<CarBallTouchState>(car_entity).touched = 0;
+
+            ctx.get<StepsRemaining>(car_entity).t = consts::episodeLen;
+        }
+    }
+
+    Entity ball_entity = ctx.data().ball;
+
+    ctx.get<Position>(ball_entity) = Vector3{ 0.f, 0.f, consts::ballRadius };
+    ctx.get<Rotation>(ball_entity) = 
+        Quat::angleAxis(0.0f, Vector3{0.f, 0.f, 1.f});
+    ctx.get<Velocity>(ball_entity) = {
+        Vector3::zero(),
+        Vector3::zero()
+    };
+    ctx.get<BallGoalState>(ball_entity) = BallGoalState{
+        BallGoalState::State::None,
+        0
+    };
 }
 
 // Although agents and walls persist between episodes, we still need to
