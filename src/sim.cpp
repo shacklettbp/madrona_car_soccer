@@ -576,9 +576,7 @@ inline void rewardSystem(Engine &engine,
         float ball_diff_to_center = ball_pos.y;
 
         // The team won!
-        if (ball_diff_to_target > 0.f) {
-            reward += 10.f;
-        } else {
+        if (ball_diff_to_target <= 0.f) {
             reward += 0.1f * ((1.f / (abs(ball_diff_to_target + 1.f))) - 
                     1.f / (abs(ball_diff_to_center) + 1.f));
         }
@@ -595,9 +593,7 @@ inline void rewardSystem(Engine &engine,
         float ball_diff_to_target = target_goal_y - ball_pos.y;
         float ball_diff_to_center = ball_pos.y;
 
-        if (ball_diff_to_target < 0.f) {
-            reward += 10.f;
-        } else {
+        if (ball_diff_to_target >= 0.f) {
             reward += 0.1f * ((1.f / (abs(ball_diff_to_target + 1.f))) - 
                     1.f / (abs(ball_diff_to_center) + 1.f));
         }
