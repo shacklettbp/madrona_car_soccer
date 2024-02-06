@@ -13,7 +13,7 @@ rm -rf ${ROOT_DIR}/ckpts/$1 && MADRONA_MWGPU_KERNEL_CACHE=${ROOT_DIR}/build/cach
     --ckpt-dir ${ROOT_DIR}/ckpts/$1 \
     --num-updates 50000 \
     --num-worlds 4096 \
-    --lr 1e-4 \
+    --lr 5e-5 \
     --steps-per-update 40 \
     --num-bptt-chunks 4 \
     --num-minibatches 4 \

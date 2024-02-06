@@ -529,8 +529,6 @@ inline void rewardSystem(Engine &engine,
                          CarBallTouchState touch_state,
                          Reward &reward_out)
 {
-    (void)e;
-
     Vector3 car_fwd = rot.rotateVec({0.f, 1.f, 0.f});
 
     Team &my_team = engine.data().teams[team_state.teamIdx];
@@ -552,6 +550,10 @@ inline void rewardSystem(Engine &engine,
     for (int i = 0; i < consts::numCarsPerTeam; ++i) {
         Entity player_entity = my_team.players[i];
 
+        if (player_entity == e) {
+            continue;
+        }
+
         int32_t t = engine.get<CarBallTouchState>(player_entity).touched;
         if (t) {
             reward += 0.1f;
@@ -562,50 +564,44 @@ inline void rewardSystem(Engine &engine,
     // 3) Ball was hit by the car
     if (touch_state.touched) {
         reward += 1.f;
-
-        printf("Team %d touched\n", team_state.teamIdx);
     }
 
-    // 4) Ball is close to enemy's goal / past the goal
-    // Team 0 is trying to score towards the -y direction
-    // Team 1 is trying to score towards the +y direction
-    if (team_state.teamIdx == 0) {
-        // Less negative is better
-        float target_goal_y = (-consts::worldLength/2.f);
-        float ball_diff_to_target = target_goal_y - ball_pos.y;
-        float ball_diff_to_center = ball_pos.y;
-
-        // The team won!
-        if (ball_diff_to_target <= 0.f) {
-            reward += 0.1f * ((1.f / (abs(ball_diff_to_target + 1.f))) - 
-                    1.f / (abs(ball_diff_to_center) + 1.f));
-        }
-
-        if (ball_gs.state == BallGoalState::State::InGoal &&
-            ball_gs.data == 0) {
+    // 4) Goal scored
+    if (ball_gs.state == BallGoalState::State::InGoal) {
+        if (ball_gs.data == team_state.teamIdx) {
             reward += 10.f;
-
-            printf("Team 0 Scored!\n");
+        } else {
+            reward -= 10.f;
         }
     } else {
-        // Less positive is better
-        float target_goal_y = consts::worldLength/2.f;
-        float ball_diff_to_target = target_goal_y - ball_pos.y;
-        float ball_diff_to_center = ball_pos.y;
+        // 5) Try to keep ball towards the opponent goal
+        // Team 0 is trying to score towards the -y direction
+        // Team 1 is trying to score towards the +y direction
+        
+        constexpr float half_pitch_len = consts::worldLength / 2.f;
 
-        if (ball_diff_to_target >= 0.f) {
-            reward += 0.1f * ((1.f / (abs(ball_diff_to_target + 1.f))) - 
-                    1.f / (abs(ball_diff_to_center) + 1.f));
+        float side_y = half_pitch_len;
+        if (team_state.teamIdx == 0) {
+            side_y *= -1;
+        }
+        
+        float to_side_y = abs(ball_pos.y - side_y);
+        float to_center_x = ball_pos.x;
+
+        // Not on the desired side
+        float side_reward_sign = 1.f;
+        if (to_side_y > half_pitch_len) {
+            to_side_y = abs(ball_pos.y + side_y);
+            side_reward_sign = -1.f;
         }
 
-        if (ball_gs.state == BallGoalState::State::InGoal &&
-            ball_gs.data == 1) {
-            reward += 10.f;
+        float side_reward = 0.1f * ((1.f / (abs(to_side_y + 1.f))) -
+            1.f / (abs(to_center_x) + 1.f));
 
-            printf("Team 1 Scored!\n");
-        }
+        reward += side_reward_sign * side_reward;
     }
 
+    printf("(%u %u): %f\n", e.id, e.gen, reward);
     reward_out.v = reward;
 }
 
