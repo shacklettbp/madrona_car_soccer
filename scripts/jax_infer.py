@@ -18,10 +18,17 @@ madrona_learn.init(0.6)
 
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('--num-worlds', type=int, required=True)
-arg_parser.add_argument('--num-policies', type=int, default=1)
 arg_parser.add_argument('--num-steps', type=int, default=200)
+
 arg_parser.add_argument('--ckpt-path', type=str, required=True)
+arg_parser.add_argument('--crossplay', action='store_true')
+arg_parser.add_argument('--single-policy', type=int, default=None)
 arg_parser.add_argument('--action-dump-path', type=str)
+
+arg_parser.add_argument('--print-obs', action='store_true')
+arg_parser.add_argument('--print-action-probs', action='store_true')
+arg_parser.add_argument('--print-rewards', action='store_true')
+
 arg_parser.add_argument('--fp16', action='store_true')
 arg_parser.add_argument('--bf16', action='store_true')
 arg_parser.add_argument('--gpu-sim', action='store_true')
@@ -37,6 +44,11 @@ sim = madrona_rocket_league.SimManager(
     rand_seed = 5,
 )
 
+team_size = 3
+num_teams = 2
+
+num_agents_per_world = team_size * num_teams
+
 jax_gpu = jax.devices()[0].platform == 'gpu'
 
 sim_step, init_sim_data = sim.jax(jax_gpu)
@@ -46,23 +58,34 @@ if args.action_dump_path:
 else:
     action_log = None
 
+step_idx = 0
+
 def host_cb(obs, actions, action_probs, values, dones, rewards):
-    print(obs)
+    global step_idx
 
-    print("Actions:", actions)
+    if args.print_obs:
+        print(obs)
 
-    print("Move Amount Probs")
-    print(" ", np.array_str(action_probs[0][0], precision=2, suppress_small=True))
-    print(" ", np.array_str(action_probs[0][1], precision=2, suppress_small=True))
+    print(f"\nStep {step_idx}")
 
-    print("Turn Probs")
-    print(" ", np.array_str(action_probs[1][0], precision=2, suppress_small=True))
-    print(" ", np.array_str(action_probs[1][1], precision=2, suppress_small=True))
+    if args.print_action_probs:
+        for i in range(actions.shape[0]):
+            if i % num_agents_per_world == 0:
+                print(f"World {i // num_agents_per_world}")
 
-    print("Rewards:", rewards)
+            print(f" Agent {i % num_agents_per_world}:")
+            print("  Action:", actions[..., i, :])
+
+            print(f"  Move Amount Probs: {float(action_probs[0][i][0]):.2e} {float(action_probs[0][i][1]):.2e} {float(action_probs[0][i][2]):.2e}")
+            print(f"  Turn Probs:        {float(action_probs[1][i][0]):.2e} {float(action_probs[1][i][1]):.2e} {float(action_probs[1][i][2]):.2e}")
+
+    if args.print_rewards:
+        print("Rewards:", rewards)
 
     if action_log:
         actions.tofile(action_log)
+
+    step_idx += 1
 
     return ()
 
@@ -87,7 +110,23 @@ else:
 
 policy, obs_preprocess = make_policy(dtype)
 
+single_policy_cfg = None
+multi_policy_cfg = None
+
+if args.single_policy != None:
+    assert not args.crossplay
+
+    single_policy_cfg = madrona_learn.SinglePolicyEvalConfig(
+        policy_idx = args.single_policy,
+    )
+elif args.crossplay:
+    multi_policy_cfg = madrona_learn.MultiPolicyEvalConfig(
+        num_teams = num_teams,
+        team_size = team_size,
+    )
+
 madrona_learn.eval_ckpt(dev, args.ckpt_path, args.num_steps, sim_step,
-    init_sim_data, policy, obs_preprocess, iter_cb, dtype)
+    init_sim_data, policy, obs_preprocess, iter_cb, dtype,
+    single_policy_cfg, multi_policy_cfg)
 
 del sim
