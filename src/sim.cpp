@@ -423,18 +423,28 @@ static inline float computeZAngle(Quat q)
     return atan2f(siny_cosp, cosy_cosp);
 }
 
-static inline PolarObservation xyToPolar(Vector3 v)
+static inline PolarObservation xyzToPolar(Vector3 v)
 {
-    Vector2 xy { v.x, v.y };
+    float r = v.length();
 
-    float r = xy.length();
+    if (r < 1e-5f) {
+        return PolarObservation {
+            .r = 0.f,
+            .theta = 0.f,
+            .phi = 0.f,
+        };
+    }
+
+    v /= r;
 
     // Note that this is angle off y-forward
-    float theta = atan2f(xy.x, xy.y);
+    float theta = -atan2f(v.x, v.y);
+    float phi = asinf (v.z);
 
     return PolarObservation {
         .r = distObs(r),
         .theta = angleObs(theta),
+        .phi = angleObs(phi),
     };
 }
 
@@ -454,9 +464,7 @@ inline void collectCarObservationSystem(Engine &engine,
     self_obs.y = globalPosObs(pos.y);
     self_obs.z = 0.f;
     self_obs.theta = angleObs(computeZAngle(rot));
-    auto vel_polar = xyToPolar(vel.linear);
-    self_obs.vel_r = vel_polar.r;
-    self_obs.vel_theta = vel_polar.theta;
+    self_obs.vel = xyzToPolar(vel.linear);
 
     Quat to_view = rot.inv();
 
@@ -474,9 +482,9 @@ inline void collectCarObservationSystem(Engine &engine,
             Vector3 to_other = other_pos - pos;
 
             OtherObservation &obs = team_obs.obs[obs_idx];
-            obs.polar = xyToPolar(to_view.rotateVec(to_other));
+            obs.polar = xyzToPolar(to_view.rotateVec(to_other));
             obs.o_theta = angleObs(computeZAngle(other_rot));
-            obs.vel = xyToPolar(other_vel);
+            obs.vel = xyzToPolar(other_vel);
 
             ++obs_idx;
         }
@@ -494,19 +502,19 @@ inline void collectCarObservationSystem(Engine &engine,
         Vector3 to_other = other_pos - pos;
 
         OtherObservation &obs = enemy_obs.obs[i];
-        obs.polar = xyToPolar(to_view.rotateVec(to_other));
+        obs.polar = xyzToPolar(to_view.rotateVec(to_other));
         obs.o_theta = angleObs(computeZAngle(other_rot));
-        obs.vel = xyToPolar(other_vel);
+        obs.vel = xyzToPolar(other_vel);
     }
 
     Entity ball_entity = engine.data().ball;
     Vector3 ball_pos = engine.get<Position>(ball_entity);
     Vector3 ball_vel = engine.get<Velocity>(ball_entity).linear;
 
-    ball_obs.x = ball_pos.x / consts::worldLength;
-    ball_obs.y = ball_pos.y / consts::worldLength;
-    ball_obs.z = 0.f;
-    ball_obs.vel = xyToPolar(ball_vel);
+    Vector3 to_ball = ball_pos - pos;
+
+    ball_obs.pos = xyzToPolar(to_view.rotateVec(to_ball));
+    ball_obs.vel = xyzToPolar(ball_vel);
 }
 
 inline void collectBallObservationSystem(Engine &engine,
@@ -514,11 +522,10 @@ inline void collectBallObservationSystem(Engine &engine,
                                          Position pos,
                                          BallObservation &obs)
 {
+    // FIXME why does this exist
     (void)engine, (void)e;
-
-    obs.x = pos.x / consts::worldLength;
-    obs.y = pos.y / consts::worldLength;
-    obs.z = 0.f;
+    (void)obs;
+    (void)pos;
 }
 
 inline void rewardSystem(Engine &engine,
@@ -556,22 +563,22 @@ inline void rewardSystem(Engine &engine,
 
         int32_t t = engine.get<CarBallTouchState>(player_entity).touched;
         if (t) {
-            reward += 0.1f;
+            reward += 0.05f;
             break;
         }
     }
     
     // 3) Ball was hit by the car
     if (touch_state.touched) {
-        reward += 1.f;
+        reward += 0.1f;
     }
 
     // 4) Goal scored
     if (ball_gs.state == BallGoalState::State::InGoal) {
         if (ball_gs.data == team_state.teamIdx) {
-            reward += 10.f;
+            reward += 5.f;
         } else {
-            reward -= 10.f;
+            reward -= 5.f;
         }
     } else {
         // 5) Try to keep ball towards the opponent goal
@@ -580,28 +587,26 @@ inline void rewardSystem(Engine &engine,
         
         constexpr float half_pitch_len = consts::worldLength / 2.f;
 
-        float side_y = half_pitch_len;
+        float to_side_y;
         if (team_state.teamIdx == 0) {
-            side_y *= -1;
+            to_side_y = ball_pos.y + half_pitch_len;
+        } else {
+            to_side_y = half_pitch_len - ball_pos.y;
         }
         
-        float to_side_y = abs(ball_pos.y - side_y);
-        float to_center_x = ball_pos.x;
-
         // Not on the desired side
-        float side_reward_sign = 1.f;
-        if (to_side_y > half_pitch_len) {
-            to_side_y = abs(ball_pos.y + side_y);
-            side_reward_sign = -1.f;
-        }
+        //float side_reward_sign = 1.f;
+        //if (to_side_y >= half_pitch_len) {
+        //    to_side_y -= half_pitch_len;
+        //    side_reward_sign = -1.f;
+        //}
 
-        float side_reward = 0.1f * ((1.f / (abs(to_side_y + 1.f))) -
-            1.f / (abs(to_center_x) + 1.f));
+        float side_reward = (0.05f / half_pitch_len) * 
+            (half_pitch_len - to_side_y);
 
-        reward += side_reward_sign * side_reward;
+        reward += side_reward;
     }
 
-    printf("(%u %u): %f\n", e.id, e.gen, reward);
     reward_out.v = reward;
 }
 

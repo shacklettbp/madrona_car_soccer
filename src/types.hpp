@@ -53,6 +53,10 @@ struct Done {
     int32_t v;
 };
 
+struct PolarObservation {
+    float r, theta, phi;
+};
+
 // Observation state for the current agent.
 // Positions are rescaled to the bounds of the play area to assist training.
 struct SelfObservation {
@@ -63,16 +67,14 @@ struct SelfObservation {
     // The direction in which the car is facing.
     float theta;
 
-    float vel_r, vel_theta;
+    PolarObservation vel;
 };
 
-struct PolarObservation {
-    float r, theta;
-};
+static_assert(sizeof(SelfObservation) == sizeof(float) * 7);
 
 // Global position of the ball
 struct BallObservation {
-    float x, y, z;
+    PolarObservation pos;
     PolarObservation vel;
 };
 
