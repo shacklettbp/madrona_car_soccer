@@ -181,7 +181,7 @@ int main(int argc, char *argv[])
     Reward *reward_readback = (Reward *)cu::allocReadback(
         sizeof(Reward) * num_views);
 
-    BallObservation *ball_readback = (BallObservation)cu::allocReadback(
+    BallObservation *ball_readback = (BallObservation *)cu::allocReadback(
         sizeof(BallObservation));
 
     cudaStream_t readback_strm;
@@ -264,6 +264,10 @@ int main(int argc, char *argv[])
                             cudaMemcpyDeviceToHost, readback_strm);
 
             REQ_CUDA(cudaStreamSynchronize(readback_strm));
+
+            self_obs_ptr = self_obs_readback;
+            reward_ptr = reward_readback;
+            ball_obs_ptr = ball_readback;
 #endif
         }
 
