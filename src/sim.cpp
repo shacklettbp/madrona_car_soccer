@@ -536,17 +536,18 @@ inline void rewardSystem(Engine &engine,
                          CarBallTouchState touch_state,
                          Reward &reward_out)
 {
-    Vector3 car_fwd = rot.rotateVec({0.f, 1.f, 0.f});
-
-    Team &my_team = engine.data().teams[team_state.teamIdx];
-
-    // 1) Ball is in front of / close to the car
     float reward = 0.f;
 
     Entity ball_entity = engine.data().ball;
     BallGoalState &ball_gs = engine.get<BallGoalState>(ball_entity);
     Position ball_pos = engine.get<Position>(ball_entity);
 
+#if 0
+    Vector3 car_fwd = rot.rotateVec({0.f, 1.f, 0.f});
+
+    Team &my_team = engine.data().teams[team_state.teamIdx];
+
+    // 1) Ball is in front of / close to the car
     Vector3 diff = ball_pos - pos;
     Vector3 diff_norm = normalize(diff);
 
@@ -567,6 +568,7 @@ inline void rewardSystem(Engine &engine,
             break;
         }
     }
+#endif
     
     // 3) Ball was hit by the car
     if (touch_state.touched) {
@@ -581,6 +583,7 @@ inline void rewardSystem(Engine &engine,
             reward -= 5.f;
         }
     } else {
+#if 0
         // 5) Try to keep ball towards the opponent goal
         // Team 0 is trying to score towards the -y direction
         // Team 1 is trying to score towards the +y direction
@@ -605,6 +608,7 @@ inline void rewardSystem(Engine &engine,
             (half_pitch_len - to_side_y);
 
         reward += side_reward;
+#endif
     }
 
     reward_out.v = reward;

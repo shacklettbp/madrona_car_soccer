@@ -695,7 +695,7 @@ Tensor Manager::actionTensor() const
     return impl_->exportTensor(ExportID::Action, Tensor::ElementType::Int32,
         {
             impl_->cfg.numWorlds * consts::numAgents,
-            2,
+            sizeof(Action) / sizeof(int32_t),
         });
 }
 
@@ -723,7 +723,7 @@ Tensor Manager::selfObservationTensor() const
                                Tensor::ElementType::Float32,
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
-                                   6,
+                                   sizeof(SelfObservation) / sizeof(float),
                                });
 }
 
@@ -733,7 +733,8 @@ Tensor Manager::ballTensor() const
                                Tensor::ElementType::Float32,
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
-                                   5,
+                                   1,
+                                   sizeof(BallObservation) / sizeof(float),
                                });
 }
 
@@ -744,7 +745,7 @@ Tensor Manager::teamObservationTensor() const
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
                                    consts::numCarsPerTeam - 1,
-                                   5,
+                                   sizeof(OtherObservation) / sizeof(float),
                                });
 }
 
@@ -755,7 +756,7 @@ Tensor Manager::enemyObservationTensor() const
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
                                    consts::numCarsPerTeam,
-                                   5,
+                                   sizeof(OtherObservation) / sizeof(float),
                                });
 }
 

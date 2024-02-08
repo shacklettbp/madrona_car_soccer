@@ -53,6 +53,10 @@ struct Done {
     int32_t v;
 };
 
+static_assert(sizeof(WorldReset) == sizeof(int32_t));
+static_assert(sizeof(Reward) == sizeof(float));
+static_assert(sizeof(Done) == sizeof(float));
+
 struct PolarObservation {
     float r, theta, phi;
 };
