@@ -269,8 +269,6 @@ void placeEntities(Engine &ctx)
                 .rotate = 1,
             };
             ctx.get<CarBallTouchState>(car_entity).touched = 0;
-
-            ctx.get<StepsRemaining>(car_entity).t = consts::episodeLen;
         }
     }
 
@@ -347,8 +345,6 @@ static void resetPersistentEntities(Engine &ctx)
                 .rotate = 1,
             };
             ctx.get<CarBallTouchState>(car_entity).touched = 0;
-
-            ctx.get<StepsRemaining>(car_entity).t = consts::episodeLen;
         }
     }
 

@@ -677,6 +677,9 @@ TrainInterface Manager::trainInterface() const
         doneTensor(),
         resetTensor(),
         Optional<Tensor>::none(),
+        {
+            { "matchResult", matchResultTensor() },
+        },
     };
 }
 
@@ -687,6 +690,16 @@ Tensor Manager::resetTensor() const
                                {
                                    impl_->cfg.numWorlds,
                                    1,
+                               });
+}
+
+Tensor Manager::matchResultTensor() const
+{
+    return impl_->exportTensor(ExportID::MatchResult,
+                               Tensor::ElementType::Int32,
+                               {
+                                   impl_->cfg.numWorlds,
+                                   sizeof(MatchResult) / sizeof(int32_t),
                                });
 }
 
