@@ -749,6 +749,7 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
 
     cleanup = queueSortByWorld<Car>(builder, {cleanup});
     cleanup = queueSortByWorld<Ball>(builder, {cleanup});
+    cleanup = queueSortByWorld<PhysicsEntity>(builder, {cleanup});
 #else
     (void)cleanup;
 #endif
