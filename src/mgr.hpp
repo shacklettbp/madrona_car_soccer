@@ -36,6 +36,7 @@ public:
     // These functions export Tensor objects that link the ECS
     // simulation state to the python bindings / PyTorch tensors (src/bindings.cpp)
     madrona::py::Tensor resetTensor() const;
+    madrona::py::Tensor matchResultTensor() const;
     madrona::py::Tensor actionTensor() const;
     madrona::py::Tensor rewardTensor() const;
     madrona::py::Tensor doneTensor() const;

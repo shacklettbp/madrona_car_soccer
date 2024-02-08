@@ -2,12 +2,18 @@
 #include <madrona/render/render_mgr.hpp>
 #include <madrona/window.hpp>
 
+#ifdef MADRONA_CUDA_SUPPORT
+#include <madrona/cuda_utils.hpp>
+#endif
+
 #include "sim.hpp"
 #include "mgr.hpp"
 #include "types.hpp"
 
 #include <filesystem>
 #include <fstream>
+
+#include <imgui.h>
 
 using namespace madrona;
 using namespace madrona::viz;
@@ -30,7 +36,7 @@ int main(int argc, char *argv[])
 {
     using namespace madEscape;
 
-    constexpr int64_t num_views = 6;
+    constexpr int64_t num_views = consts::numTeams * consts::numCarsPerTeam;
 
     // Read command line arguments
     uint32_t num_worlds = 1;
@@ -130,13 +136,20 @@ int main(int argc, char *argv[])
         return false;
     };
 
+    auto self_tensor = mgr.selfObservationTensor();
+    auto team_tensor = mgr.teamObservationTensor();
+    auto enemy_tensor = mgr.enemyObservationTensor();
+    auto ball_tensor = mgr.ballTensor();
+    auto steps_remaining_tensor = mgr.stepsRemainingTensor();
+    auto reward_tensor = mgr.rewardTensor();
+
     // Printers
-    auto self_printer = mgr.selfObservationTensor().makePrinter();
-    auto team_printer = mgr.teamObservationTensor().makePrinter();
-    auto enemy_printer = mgr.enemyObservationTensor().makePrinter();
-    auto ball_printer = mgr.ballTensor().makePrinter();
-    auto steps_remaining_printer = mgr.stepsRemainingTensor().makePrinter();
-    auto reward_printer = mgr.rewardTensor().makePrinter();
+    auto self_printer = self_tensor.makePrinter();
+    auto team_printer = team_tensor.makePrinter();
+    auto enemy_printer = enemy_tensor.makePrinter();
+    auto ball_printer = ball_tensor.makePrinter();
+    auto steps_remaining_printer = steps_remaining_tensor.makePrinter();
+    auto reward_printer = reward_tensor.makePrinter();
 
     auto printObs = [&]() {
         printf("Self\n");
@@ -161,6 +174,19 @@ int main(int argc, char *argv[])
     };
 
 
+#ifdef MADRONA_CUDA_SUPPORT
+    SelfObservation *self_obs_readback = (SelfObservation *)cu::allocReadback(
+        sizeof(SelfObservation) * num_views);
+
+    Reward *reward_readback = (Reward *)cu::allocReadback(
+        sizeof(Reward) * num_views);
+
+    BallObservation *ball_readback = (BallObservation *)cu::allocReadback(
+        sizeof(BallObservation));
+
+    cudaStream_t readback_strm;
+    REQ_CUDA(cudaStreamCreate(&readback_strm));
+#endif
 
     // Main loop for the viewer viewer
     viewer.loop(
@@ -208,5 +234,63 @@ int main(int argc, char *argv[])
         mgr.step();
 
         //printObs();
-    }, []() {});
+    }, [&]() {
+        CountT cur_world_id = viewer.getCurrentWorldID();
+        CountT agent_world_offset = cur_world_id * num_views;
+
+        SelfObservation *self_obs_ptr =
+            (SelfObservation *)self_tensor.devicePtr();
+
+        Reward *reward_ptr = (Reward *)reward_tensor.devicePtr();
+
+        BallObservation *ball_obs_ptr =
+            (BallObservation *)ball_tensor.devicePtr();
+
+        self_obs_ptr += agent_world_offset;
+        ball_obs_ptr += cur_world_id;
+
+        if (exec_mode == ExecMode::CUDA) {
+#ifdef MADRONA_CUDA_SUPPORT
+            cudaMemcpyAsync(self_obs_readback, self_obs_ptr,
+                            sizeof(SelfObservation) * num_views,
+                            cudaMemcpyDeviceToHost, readback_strm);
+
+            cudaMemcpyAsync(reward_readback, reward_ptr,
+                            sizeof(Reward) * num_views,
+                            cudaMemcpyDeviceToHost, readback_strm);
+
+            cudaMemcpyAsync(ball_readback, ball_obs_ptr,
+                            sizeof(BallObservation),
+                            cudaMemcpyDeviceToHost, readback_strm);
+
+            REQ_CUDA(cudaStreamSynchronize(readback_strm));
+
+            self_obs_ptr = self_obs_readback;
+            reward_ptr = reward_readback;
+            ball_obs_ptr = ball_readback;
+#endif
+        }
+
+        for (int64_t i = 0; i < num_views; i++) {
+            auto player_str = std::string("Player ") + std::to_string(i);
+            ImGui::Begin(player_str.c_str());
+
+            const SelfObservation &cur_self = self_obs_ptr[i];
+            const Reward &reward = reward_ptr[i];
+            const BallObservation &ball = ball_obs_ptr[i];
+
+            ImGui::Text("Position: (%.1f, %.1f, %.1f)",
+                cur_self.x, cur_self.y, cur_self.z);
+            ImGui::Text("Rotation:  %.2f",
+                cur_self.theta);
+            ImGui::Text("Velocity: (%.1f, %.1f, %.1f)",
+                cur_self.vel.r, cur_self.vel.theta, cur_self.vel.phi);
+            ImGui::Text("To Ball:  (%.1f, %.1f, %.1f)",
+                ball.pos.r, ball.pos.theta, ball.pos.phi);
+            ImGui::Text("Reward:    %.3f",
+                reward.v);
+
+            ImGui::End();
+        }
+    });
 }

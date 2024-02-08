@@ -18,9 +18,7 @@ from madrona_learn import (
 
 from jax_policy import make_policy
 
-madrona_learn.init(0.7)
-
-print(jax.devices())
+madrona_learn.init(0.6)
 
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('--gpu-id', type=int, default=0)

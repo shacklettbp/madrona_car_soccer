@@ -91,22 +91,22 @@ class PrefixCommon(nn.Module):
         jax.tree_map(lambda x: assert_valid_input(x), obs)
 
         obs, self_ob = obs.pop('self')
-        obs, ball_ob = obs.pop('ball')
         obs, steps_remaining_ob = obs.pop('stepsRemaining')
 
         self_ob = jnp.concatenate([
             self_ob,
-            ball_ob,
             steps_remaining_ob,
         ], axis=-1)
         
         obs, team_ob = obs.pop('team')
         obs, enemy_ob = obs.pop('enemy')
-        
+        obs, ball_ob = obs.pop('ball')
+
         assert len(obs) == 0
 
         return FrozenDict({
             'self': self_ob, 
+            'ball_ob': ball_ob,
             'team': team_ob,
             'enemy': enemy_ob,
         })

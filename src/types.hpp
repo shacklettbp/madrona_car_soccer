@@ -53,6 +53,24 @@ struct Done {
     int32_t v;
 };
 
+struct MatchResult {
+    int32_t winningTeam;
+    int32_t numTeamAGoals;
+    int32_t numTeamBGoals;
+};
+
+struct MatchInfo {
+    int32_t stepsRemaining;
+};
+
+static_assert(sizeof(WorldReset) == sizeof(int32_t));
+static_assert(sizeof(Reward) == sizeof(float));
+static_assert(sizeof(Done) == sizeof(float));
+
+struct PolarObservation {
+    float r, theta, phi;
+};
+
 // Observation state for the current agent.
 // Positions are rescaled to the bounds of the play area to assist training.
 struct SelfObservation {
@@ -63,16 +81,14 @@ struct SelfObservation {
     // The direction in which the car is facing.
     float theta;
 
-    float vel_r, vel_theta;
+    PolarObservation vel;
 };
 
-struct PolarObservation {
-    float r, theta;
-};
+static_assert(sizeof(SelfObservation) == sizeof(float) * 7);
 
 // Global position of the ball
 struct BallObservation {
-    float x, y, z;
+    PolarObservation pos;
     PolarObservation vel;
 };
 
@@ -106,7 +122,7 @@ struct Lidar {
 
 // Number of steps remaining in the episode. Allows non-recurrent policies
 // to track the progression of time.
-struct StepsRemaining {
+struct StepsRemainingObservation {
     uint32_t t;
 };
 
@@ -240,7 +256,6 @@ struct Ball : public madrona::Archetype<
     EntityType,
     BallGoalState,
     DynamicEntityType,
-    BallObservation,
     madrona::render::Renderable
 > {};
 
@@ -262,91 +277,11 @@ struct Car : public madrona::Archetype<
     TeamObservation,
     EnemyObservation,
     BallObservation,
-    StepsRemaining,
+    StepsRemainingObservation,
     Reward,
 
     madrona::render::RenderCamera,
     madrona::render::Renderable
-> {};
-
-// There are 2 Agents in the environment trying to get to the destination
-struct Agent : public madrona::Archetype<
-    // Basic components required for physics. Note that the current physics
-    // implementation requires archetypes to have these components first
-    // in this exact order.
-    Position,
-    Rotation,
-    Scale,
-    Velocity,
-    ObjectID,
-    ResponseType,
-    madrona::phys::solver::SubstepPrevState,
-    madrona::phys::solver::PreSolvePositional,
-    madrona::phys::solver::PreSolveVelocity,
-    ExternalForce,
-    ExternalTorque,
-    madrona::phys::broadphase::LeafID,
-
-    // Internal logic state.
-    GrabState,
-    Progress,
-    OtherAgents,
-    EntityType,
-
-    // Input
-    Action,
-
-    // Observations
-    SelfObservation,
-    // PartnerObservations,
-    // RoomEntityObservations,
-    // DoorObservation,
-    Lidar,
-    StepsRemaining,
-
-    // Reward, episode termination
-    Reward,
-    Done,
-
-    // Visualization: In addition to the fly camera, src/viewer.cpp can
-    // view the scene from the perspective of entities with this component
-    madrona::render::RenderCamera,
-    // All entities with the Renderable component will be drawn by the
-    // viewer and batch renderer
-    madrona::render::Renderable
-> {};
-
-// Archetype for the doors blocking the end of each challenge room
-struct DoorEntity : public madrona::Archetype<
-    Position, 
-    Rotation,
-    Scale,
-    Velocity,
-    ObjectID,
-    ResponseType,
-    madrona::phys::solver::SubstepPrevState,
-    madrona::phys::solver::PreSolvePositional,
-    madrona::phys::solver::PreSolveVelocity,
-    ExternalForce,
-    ExternalTorque,
-    madrona::phys::broadphase::LeafID,
-    OpenState,
-    DoorProperties,
-    EntityType,
-    madrona::render::Renderable
-> {};
-
-// Archetype for the button objects that open the doors
-// Buttons don't have collision but are rendered
-struct ButtonEntity : public madrona::Archetype<
-    Position,
-    Rotation,
-    Scale,
-    ObjectID,
-    ButtonState,
-    EntityType,
-    madrona::render::Renderable,
-    Done
 > {};
 
 // Generic archetype for entities that need physics but don't have custom

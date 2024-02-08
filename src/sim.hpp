@@ -15,6 +15,7 @@ class Engine;
 // for each component exported to the training code.
 enum class ExportID : uint32_t {
     Reset,
+    MatchResult,
     Action,
     Reward,
     Done,

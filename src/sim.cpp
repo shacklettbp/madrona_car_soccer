@@ -36,7 +36,7 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<OpenState>();
     registry.registerComponent<DoorProperties>();
     registry.registerComponent<Lidar>();
-    registry.registerComponent<StepsRemaining>();
+    registry.registerComponent<StepsRemainingObservation>();
     registry.registerComponent<EntityType>();
     registry.registerComponent<BallGoalState>();
     registry.registerComponent<DynamicEntityType>();
@@ -45,22 +45,23 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<CarBallTouchState>();
 
     registry.registerSingleton<WorldReset>();
+    registry.registerSingleton<MatchInfo>();
+    registry.registerSingleton<MatchResult>();
 
-    registry.registerArchetype<Agent>();
     registry.registerArchetype<PhysicsEntity>();
-    registry.registerArchetype<DoorEntity>();
-    registry.registerArchetype<ButtonEntity>();
     registry.registerArchetype<Car>();
     registry.registerArchetype<Ball>();
     registry.registerArchetype<Collision>();
 
     registry.exportSingleton<WorldReset>((uint32_t)ExportID::Reset);
+    registry.exportSingleton<MatchResult>((uint32_t)ExportID::MatchResult);
     registry.exportColumn<Car, BallObservation>((uint32_t)ExportID::BallObservation);
     registry.exportColumn<Car, Action>((uint32_t)ExportID::Action);
     registry.exportColumn<Car, SelfObservation>((uint32_t)ExportID::SelfObservation);
     registry.exportColumn<Car, TeamObservation>((uint32_t)ExportID::TeamObservation);
     registry.exportColumn<Car, EnemyObservation>((uint32_t)ExportID::EnemyObservation);
-    registry.exportColumn<Car, StepsRemaining>((uint32_t)ExportID::StepsRemaining);
+    registry.exportColumn<Car, StepsRemainingObservation>(
+        (uint32_t)ExportID::StepsRemaining);
     registry.exportColumn<Car, Reward>((uint32_t)ExportID::Reward);
     registry.exportColumn<Car, Done>((uint32_t)ExportID::Done);
 }
@@ -78,8 +79,15 @@ static inline void initWorld(Engine &ctx)
     ctx.data().rng = RNG(rand::split_i(ctx.data().initRandKey,
         ctx.data().curWorldEpisode++, (uint32_t)ctx.worldID().idx));
 
+    ctx.singleton<MatchInfo>().stepsRemaining = consts::episodeLen;
+
     // Defined in src/level_gen.hpp / src/level_gen.cpp
     generateWorld(ctx);
+}
+
+inline void matchInfoSystem(Engine &, MatchInfo &match_info)
+{
+    match_info.stepsRemaining -= 1;
 }
 
 // This system runs each frame and checks if the current episode is complete
@@ -91,15 +99,10 @@ inline void resetSystem(Engine &ctx, WorldReset &reset)
 {
     int32_t should_reset = reset.reset;
     if (ctx.data().autoReset) {
-        for (CountT team_idx = 0; team_idx < 2; ++team_idx) {
-            Team &team = ctx.data().teams[team_idx];
-            for (CountT i = 0; i < consts::numCarsPerTeam; i++) {
-                Entity agent = team.players[i];
-                Done done = ctx.get<Done>(agent);
-                if (done.v) {
-                    should_reset = 1;
-                }
-            }
+        const MatchInfo &match_info = ctx.singleton<MatchInfo>();
+
+        if (match_info.stepsRemaining == 0) {
+            should_reset = 1;
         }
     }
 
@@ -431,40 +434,50 @@ static inline float computeZAngle(Quat q)
     return atan2f(siny_cosp, cosy_cosp);
 }
 
-static inline PolarObservation xyToPolar(Vector3 v)
+static inline PolarObservation xyzToPolar(Vector3 v)
 {
-    Vector2 xy { v.x, v.y };
+    float r = v.length();
 
-    float r = xy.length();
+    if (r < 1e-5f) {
+        return PolarObservation {
+            .r = 0.f,
+            .theta = 0.f,
+            .phi = 0.f,
+        };
+    }
+
+    v /= r;
 
     // Note that this is angle off y-forward
-    float theta = atan2f(xy.x, xy.y);
+    float theta = -atan2f(v.x, v.y);
+    float phi = asinf (v.z);
 
     return PolarObservation {
         .r = distObs(r),
         .theta = angleObs(theta),
+        .phi = angleObs(phi),
     };
 }
 
-inline void collectCarObservationSystem(Engine &engine,
-                                        Entity e,
-                                        Position pos,
-                                        Rotation rot,
-                                        Velocity vel,
-                                        SelfObservation &self_obs,
-                                        TeamObservation &team_obs,
-                                        EnemyObservation &enemy_obs,
-                                        BallObservation &ball_obs,
-                                        TeamState team_state)
+inline void collectCarObservationSystem(
+    Engine &engine,
+    Entity e,
+    Position pos,
+    Rotation rot,
+    Velocity vel,
+    SelfObservation &self_obs,
+    TeamObservation &team_obs,
+    EnemyObservation &enemy_obs,
+    BallObservation &ball_obs,
+    StepsRemainingObservation &steps_remaining_ob,
+    TeamState team_state)
 {
     // Handle self observation first
     self_obs.x = globalPosObs(pos.x);
     self_obs.y = globalPosObs(pos.y);
     self_obs.z = 0.f;
     self_obs.theta = angleObs(computeZAngle(rot));
-    auto vel_polar = xyToPolar(vel.linear);
-    self_obs.vel_r = vel_polar.r;
-    self_obs.vel_theta = vel_polar.theta;
+    self_obs.vel = xyzToPolar(vel.linear);
 
     Quat to_view = rot.inv();
 
@@ -482,9 +495,9 @@ inline void collectCarObservationSystem(Engine &engine,
             Vector3 to_other = other_pos - pos;
 
             OtherObservation &obs = team_obs.obs[obs_idx];
-            obs.polar = xyToPolar(to_view.rotateVec(to_other));
+            obs.polar = xyzToPolar(to_view.rotateVec(to_other));
             obs.o_theta = angleObs(computeZAngle(other_rot));
-            obs.vel = xyToPolar(other_vel);
+            obs.vel = xyzToPolar(other_vel);
 
             ++obs_idx;
         }
@@ -502,31 +515,21 @@ inline void collectCarObservationSystem(Engine &engine,
         Vector3 to_other = other_pos - pos;
 
         OtherObservation &obs = enemy_obs.obs[i];
-        obs.polar = xyToPolar(to_view.rotateVec(to_other));
+        obs.polar = xyzToPolar(to_view.rotateVec(to_other));
         obs.o_theta = angleObs(computeZAngle(other_rot));
-        obs.vel = xyToPolar(other_vel);
+        obs.vel = xyzToPolar(other_vel);
     }
 
     Entity ball_entity = engine.data().ball;
     Vector3 ball_pos = engine.get<Position>(ball_entity);
     Vector3 ball_vel = engine.get<Velocity>(ball_entity).linear;
 
-    ball_obs.x = ball_pos.x / consts::worldLength;
-    ball_obs.y = ball_pos.y / consts::worldLength;
-    ball_obs.z = 0.f;
-    ball_obs.vel = xyToPolar(ball_vel);
-}
+    Vector3 to_ball = ball_pos - pos;
 
-inline void collectBallObservationSystem(Engine &engine,
-                                         Entity e,
-                                         Position pos,
-                                         BallObservation &obs)
-{
-    (void)engine, (void)e;
+    ball_obs.pos = xyzToPolar(to_view.rotateVec(to_ball));
+    ball_obs.vel = xyzToPolar(ball_vel);
 
-    obs.x = pos.x / consts::worldLength;
-    obs.y = pos.y / consts::worldLength;
-    obs.z = 0.f;
+    steps_remaining_ob.t = engine.singleton<MatchInfo>().stepsRemaining;
 }
 
 inline void rewardSystem(Engine &engine,
@@ -537,25 +540,26 @@ inline void rewardSystem(Engine &engine,
                          CarBallTouchState touch_state,
                          Reward &reward_out)
 {
-    (void)e;
-
-    Vector3 car_fwd = rot.rotateVec({0.f, 1.f, 0.f});
-
-    Team &my_team = engine.data().teams[team_state.teamIdx];
-
-    // 1) Ball is in front of / close to the car
     float reward = 0.f;
 
     Entity ball_entity = engine.data().ball;
     BallGoalState &ball_gs = engine.get<BallGoalState>(ball_entity);
     Position ball_pos = engine.get<Position>(ball_entity);
 
+    Team &my_team = engine.data().teams[team_state.teamIdx];
+
+
+#if 0
+    Vector3 car_fwd = rot.rotateVec({0.f, 1.f, 0.f});
+
+    // 1) Ball is in front of / close to the car
     Vector3 diff = ball_pos - pos;
     Vector3 diff_norm = normalize(diff);
 
     float cos_theta = diff_norm.dot(car_fwd);
     reward += cos_theta * 0.1f / (diff.length2() + 1.f);
 
+#endif
     // 2) Ball was hit by a car in your team
     for (int i = 0; i < consts::numCarsPerTeam; ++i) {
         Entity player_entity = my_team.players[i];
@@ -567,45 +571,47 @@ inline void rewardSystem(Engine &engine,
         }
     }
     
+#if 0
     // 3) Ball was hit by the car
     if (touch_state.touched) {
-        reward += 1.f;
+        reward += 0.1f;
     }
+#endif
 
-    // 4) Ball is close to enemy's goal / past the goal
-    // Team 0 is trying to score towards the -y direction
-    // Team 1 is trying to score towards the +y direction
-    if (team_state.teamIdx == 0) {
-        // Less negative is better
-        float target_goal_y = (-consts::worldLength/2.f);
-        float ball_diff_to_target = target_goal_y - ball_pos.y;
-        float ball_diff_to_center = ball_pos.y;
-
-        // The team won!
-        if (ball_diff_to_target <= 0.f) {
-            reward += 0.1f * ((1.f / (abs(ball_diff_to_target + 1.f))) - 
-                    1.f / (abs(ball_diff_to_center) + 1.f));
-        }
-
-        if (ball_gs.state == BallGoalState::State::InGoal &&
-            ball_gs.data == 0) {
-            reward += 10.f;
+    // 4) Goal scored
+    if (ball_gs.state == BallGoalState::State::InGoal) {
+        if (ball_gs.data == team_state.teamIdx) {
+            reward += 5.f;
+        } else {
+            reward -= 5.f;
         }
     } else {
-        // Less positive is better
-        float target_goal_y = consts::worldLength/2.f;
-        float ball_diff_to_target = target_goal_y - ball_pos.y;
-        float ball_diff_to_center = ball_pos.y;
+#if 0
+        // 5) Try to keep ball towards the opponent goal
+        // Team 0 is trying to score towards the -y direction
+        // Team 1 is trying to score towards the +y direction
+        
+        constexpr float half_pitch_len = consts::worldLength / 2.f;
 
-        if (ball_diff_to_target >= 0.f) {
-            reward += 0.1f * ((1.f / (abs(ball_diff_to_target + 1.f))) - 
-                    1.f / (abs(ball_diff_to_center) + 1.f));
+        float to_side_y;
+        if (team_state.teamIdx == 0) {
+            to_side_y = ball_pos.y + half_pitch_len;
+        } else {
+            to_side_y = half_pitch_len - ball_pos.y;
         }
+        
+        // Not on the desired side
+        //float side_reward_sign = 1.f;
+        //if (to_side_y >= half_pitch_len) {
+        //    to_side_y -= half_pitch_len;
+        //    side_reward_sign = -1.f;
+        //}
 
-        if (ball_gs.state == BallGoalState::State::InGoal &&
-            ball_gs.data == 1) {
-            reward += 10.f;
-        }
+        float side_reward = (0.05f / half_pitch_len) * 
+            (half_pitch_len - to_side_y);
+
+        reward += side_reward;
+#endif
     }
 
     reward_out.v = reward;
@@ -614,15 +620,14 @@ inline void rewardSystem(Engine &engine,
 // Keep track of the number of steps remaining in the episode and
 // notify training that an episode has completed by
 // setting done = 1 on the final step of the episode
-inline void stepTrackerSystem(Engine &,
-                              StepsRemaining &steps_remaining,
-                              Done &done)
+inline void writeDonesSystem(Engine &ctx,
+                             Done &done)
 {
-    int32_t num_remaining = --steps_remaining.t;
-    if (num_remaining == consts::episodeLen - 1) {
-        done.v = 0;
-    } else if (num_remaining == 0) {
+    int32_t steps_remaining = ctx.singleton<MatchInfo>().stepsRemaining == 0;
+    if (steps_remaining == 0 || ctx.singleton<WorldReset>().reset == 1) {
         done.v = 1;
+    } else if (steps_remaining == consts::episodeLen - 1) {
+        done.v = 0;
     }
 }
 
@@ -649,6 +654,11 @@ TaskGraph::NodeID queueSortByWorld(TaskGraph::Builder &builder,
 // Build the task graph
 void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
 {
+    auto match_info_sys = builder.addToGraph<ParallelForNode<Engine,
+        matchInfoSystem,
+            MatchInfo
+        >>({});
+
     // Turn policy actions into movement
     auto move_sys = builder.addToGraph<ParallelForNode<Engine,
         carMovementSystem,
@@ -658,7 +668,7 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             Rotation,
             Velocity,
             CarBallTouchState
-        >>({});
+        >>({match_info_sys});
 
     auto ball_move_sys = builder.addToGraph<ParallelForNode<Engine,
         ballMovementSystem,
@@ -668,25 +678,48 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             BallGoalState
         >>({move_sys});
 
+    auto post_collisions = ball_move_sys;
+
 #ifdef MADRONA_GPU_MODE
     auto sort_collisions = queueSortByWorld<Collision>(builder, {ball_move_sys});
+    post_collisions = sort_collisions;
+#endif
 
     auto collision_resolve = builder.addToGraph<ParallelForNode<Engine,
          collisionResolveSystem,
             WorldReset
-        >>({sort_collisions});
-#else
-    auto collision_resolve = builder.addToGraph<ParallelForNode<Engine,
-         collisionResolveSystem,
-            WorldReset
-        >>({ball_move_sys});
-#endif
+        >>({post_collisions});
+
+    auto clear_colisions = builder.addToGraph<ClearTmpNode<Collision>>(
+        {collision_resolve});
 
     auto velocity_correct_system = builder.addToGraph<ParallelForNode<Engine,
          velocityCorrectSystem,
             DynamicEntityType,
             Velocity
-        >>({collision_resolve});
+        >>({clear_colisions});
+
+    auto reward_sys = builder.addToGraph<ParallelForNode<Engine,
+        rewardSystem,
+            Entity,
+            Position,
+            Rotation,
+            TeamState,
+            CarBallTouchState,
+            Reward
+        >>({velocity_correct_system});
+
+    // Check if the episode is over
+    auto done_sys = builder.addToGraph<ParallelForNode<Engine,
+        writeDonesSystem,
+            Done
+        >>({reward_sys});
+
+    // Conditionally reset the world if the episode is over
+    auto reset_sys = builder.addToGraph<ParallelForNode<Engine,
+        resetSystem,
+            WorldReset
+        >>({done_sys});
 
     auto car_obs_system = builder.addToGraph<ParallelForNode<Engine,
          collectCarObservationSystem,
@@ -698,53 +731,27 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             TeamObservation,
             EnemyObservation,
             BallObservation,
+            StepsRemainingObservation,
             TeamState
         >>({velocity_correct_system});
 
-    auto ball_obs_system = builder.addToGraph<ParallelForNode<Engine,
-         collectBallObservationSystem,
-            Entity,
-            Position,
-            BallObservation
-        >>({car_obs_system});
+    if (cfg.renderBridge) {
+        RenderingSystem::setupTasks(builder, {reset_sys});
+    }
 
-    // Check if the episode is over
-    auto done_sys = builder.addToGraph<ParallelForNode<Engine,
-        stepTrackerSystem,
-            StepsRemaining,
-            Done
-        >>({ball_obs_system});
+    auto cleanup_start = car_obs_system;
 
-    auto reward_sys = builder.addToGraph<ParallelForNode<Engine,
-        rewardSystem,
-            Entity,
-            Position,
-            Rotation,
-            TeamState,
-            CarBallTouchState,
-            Reward
-        >>({done_sys});
-
-    // Conditionally reset the world if the episode is over
-    auto reset_sys = builder.addToGraph<ParallelForNode<Engine,
-        resetSystem,
-            WorldReset
-        >>({reward_sys});
-
-    auto clear_temporaries = builder.addToGraph<ClearTmpNode<Collision>>({reset_sys});
-    auto clear_tmp = builder.addToGraph<ResetTmpAllocNode>({clear_temporaries});
-    (void)clear_tmp;
-
+    auto cleanup = builder.addToGraph<ResetTmpAllocNode>({cleanup_start});
 #ifdef MADRONA_GPU_MODE
     // RecycleEntitiesNode is required on the GPU backend in order to reclaim
     // deleted entity IDs.
-    auto recycle_sys = builder.addToGraph<RecycleEntitiesNode>({reset_sys});
-    (void)recycle_sys;
-#endif
+    cleanup = builder.addToGraph<RecycleEntitiesNode>({cleanup});
 
-    if (cfg.renderBridge) {
-        RenderingSystem::setupTasks(builder, {clear_tmp});
-    }
+    cleanup = queueSortByWorld<Car>(builder, {cleanup});
+    cleanup = queueSortByWorld<Ball>(builder, {cleanup});
+#else
+    (void)cleanup;
+#endif
 }
 
 Sim::Sim(Engine &ctx,
