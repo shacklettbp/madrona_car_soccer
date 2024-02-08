@@ -314,12 +314,20 @@ inline void checkBallGoalPosts(Engine &engine,
         }
     }
 
+    float goal_post_rad = (consts::worldWidth / 3.f + consts::wallWidth*2.f)/2.f;
+
     if (goal_idx == 0 && pos.y < -consts::worldLength*0.5f) {
-        ball_gs.state = BallGoalState::State::InGoal;
-        ball_gs.data = 0;
+        if (pos.x > (-consts::worldWidth/3.f + goal_post_rad) &&
+            pos.x < (+consts::worldWidth/3.f - goal_post_rad)) {
+            ball_gs.state = BallGoalState::State::InGoal;
+            ball_gs.data = 0;
+        }
     } else if (goal_idx == 1 && pos.y > consts::worldLength*0.5f) {
-        ball_gs.state = BallGoalState::State::InGoal;
-        ball_gs.data = 1;
+        if (pos.x > (-consts::worldWidth/3.f + goal_post_rad) &&
+            pos.x < (+consts::worldWidth/3.f - goal_post_rad)) {
+            ball_gs.state = BallGoalState::State::InGoal;
+            ball_gs.data = 1;
+        }
     }
 }
 
@@ -562,8 +570,6 @@ inline void rewardSystem(Engine &engine,
     // 3) Ball was hit by the car
     if (touch_state.touched) {
         reward += 1.f;
-
-        printf("Team %d touched\n", team_state.teamIdx);
     }
 
     // 4) Ball is close to enemy's goal / past the goal
@@ -584,8 +590,6 @@ inline void rewardSystem(Engine &engine,
         if (ball_gs.state == BallGoalState::State::InGoal &&
             ball_gs.data == 0) {
             reward += 10.f;
-
-            printf("Team 0 Scored!\n");
         }
     } else {
         // Less positive is better
@@ -601,8 +605,6 @@ inline void rewardSystem(Engine &engine,
         if (ball_gs.state == BallGoalState::State::InGoal &&
             ball_gs.data == 1) {
             reward += 10.f;
-
-            printf("Team 1 Scored!\n");
         }
     }
 
