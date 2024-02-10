@@ -83,6 +83,17 @@ static inline Optional<render::RenderManager> initRenderManager(
     });
 }
 
+static inline uint64_t numTensorBytes(const Tensor &t)
+{
+    uint64_t num_items = 1;
+    uint64_t num_dims = t.numDims();
+    for (uint64_t i = 0; i < num_dims; i++) {
+        num_items *= t.dims()[i];
+    }
+
+    return num_items * (uint64_t)t.numBytesPerItem();
+}
+
 struct Manager::Impl {
     Config cfg;
     PhysicsLoader physicsLoader;
@@ -110,13 +121,15 @@ struct Manager::Impl {
     virtual void run() = 0;
 
 #ifdef MADRONA_CUDA_SUPPORT
-    virtual void gpuRollout(cudaStream_t strm, void **buffers,
-                            const TrainInterface &train_iface) = 0;
+    virtual void gpuStreamInit(cudaStream_t strm, void **buffers, Manager &) = 0;
+    virtual void gpuStreamStep(cudaStream_t strm, void **buffers, Manager &) = 0;
 #endif
 
     virtual Tensor exportTensor(ExportID slot,
-        Tensor::ElementType type,
+        TensorElementType type,
         madrona::Span<const int64_t> dimensions) const = 0;
+
+    virtual Tensor policySimParamsTensor() const = 0;
 
     static inline Impl * init(const Config &cfg);
 };
@@ -126,21 +139,27 @@ struct Manager::CPUImpl final : Manager::Impl {
         TaskGraphExecutor<Engine, Sim, Sim::Config, Sim::WorldInit>;
 
     TaskGraphT cpuExec;
+    PolicySimParams *policySimParams;
 
     inline CPUImpl(const Manager::Config &mgr_cfg,
                    PhysicsLoader &&phys_loader,
                    WorldReset *reset_buffer,
                    Action *action_buffer,
+                   PolicySimParams *policy_sim_params,
                    Optional<RenderGPUState> &&render_gpu_state,
                    Optional<render::RenderManager> &&render_mgr,
                    TaskGraphT &&cpu_exec)
         : Impl(mgr_cfg, std::move(phys_loader),
                reset_buffer, action_buffer,
                std::move(render_gpu_state), std::move(render_mgr)),
-          cpuExec(std::move(cpu_exec))
+          cpuExec(std::move(cpu_exec)),
+          policySimParams(policy_sim_params)
     {}
 
-    inline virtual ~CPUImpl() final {}
+    inline virtual ~CPUImpl() final
+    {
+        free(policySimParams);
+    }
 
     inline virtual void run()
     {
@@ -148,18 +167,28 @@ struct Manager::CPUImpl final : Manager::Impl {
     }
 
 #ifdef MADRONA_CUDA_SUPPORT
-    virtual void gpuRollout(cudaStream_t strm, void **buffers,
-                            const TrainInterface &train_iface)
+    virtual void gpuStreamInit(cudaStream_t, void **, Manager &)
     {
-        (void)strm;
-        (void)buffers;
-        (void)train_iface;
+        assert(false);
+    }
+
+    virtual void gpuStreamStep(cudaStream_t, void **, Manager &)
+    {
         assert(false);
     }
 #endif
 
+    virtual Tensor policySimParamsTensor() const final
+    {
+        return Tensor(policySimParams, TensorElementType::Float32,
+            {
+                cfg.numPBTPolicies,
+                sizeof(PolicySimParams) / sizeof(float),
+            }, Optional<int>::none());
+    }
+
     virtual inline Tensor exportTensor(ExportID slot,
-        Tensor::ElementType type,
+        TensorElementType type,
         madrona::Span<const int64_t> dims) const final
     {
         void *dev_ptr = cpuExec.getExported((uint32_t)slot);
@@ -170,21 +199,27 @@ struct Manager::CPUImpl final : Manager::Impl {
 #ifdef MADRONA_CUDA_SUPPORT
 struct Manager::CUDAImpl final : Manager::Impl {
     MWCudaExecutor gpuExec;
+    PolicySimParams *policySimParams;
 
     inline CUDAImpl(const Manager::Config &mgr_cfg,
                    PhysicsLoader &&phys_loader,
                    WorldReset *reset_buffer,
                    Action *action_buffer,
+                   PolicySimParams *policy_sim_params,
                    Optional<RenderGPUState> &&render_gpu_state,
                    Optional<render::RenderManager> &&render_mgr,
                    MWCudaExecutor &&gpu_exec)
         : Impl(mgr_cfg, std::move(phys_loader),
                reset_buffer, action_buffer,
                std::move(render_gpu_state), std::move(render_mgr)),
-          gpuExec(std::move(gpu_exec))
+          gpuExec(std::move(gpu_exec)),
+          policySimParams(policy_sim_params)
     {}
 
-    inline virtual ~CUDAImpl() final {}
+    inline virtual ~CUDAImpl() final
+    {
+        REQ_CUDA(cudaFree(policySimParams));
+    }
 
     inline virtual void run()
     {
@@ -192,74 +227,86 @@ struct Manager::CUDAImpl final : Manager::Impl {
     }
 
 #ifdef MADRONA_CUDA_SUPPORT
-    virtual void gpuRollout(cudaStream_t strm, void **buffers,
-                            const TrainInterface &train_iface)
+    inline void ** copyOutObservations(cudaStream_t strm, void **buffers, Manager &mgr)
     {
-        auto numTensorBytes = [](const Tensor &t) {
-            uint64_t num_items = 1;
-            uint64_t num_dims = t.numDims();
-            for (uint64_t i = 0; i < num_dims; i++) {
-                num_items *= t.dims()[i];
-            }
-
-            return num_items * (uint64_t)t.numBytesPerItem();
-        };
-
-        auto copyToSim = [&strm, &numTensorBytes](const Tensor &dst, void *src) {
-            uint64_t num_bytes = numTensorBytes(dst);
-
-            REQ_CUDA(cudaMemcpyAsync(dst.devicePtr(), src, num_bytes,
-                cudaMemcpyDeviceToDevice, strm));
-        };
-
-        auto copyFromSim = [&strm, &numTensorBytes](void *dst, const Tensor &src) {
+        auto copyFromSim = [&strm](void *dst, const Tensor &src) {
             uint64_t num_bytes = numTensorBytes(src);
 
             REQ_CUDA(cudaMemcpyAsync(dst, src.devicePtr(), num_bytes,
                 cudaMemcpyDeviceToDevice, strm));
         };
 
-        Span<const TrainInterface::NamedTensor> src_obs =
-            train_iface.observations();
-        Span<const TrainInterface::NamedTensor> src_stats =
-            train_iface.stats();
-        auto policy_assignments = train_iface.policyAssignments();
+        // Observations
+        copyFromSim(*buffers++, mgr.selfObservationTensor());
+        copyFromSim(*buffers++, mgr.teamObservationTensor());
+        copyFromSim(*buffers++, mgr.enemyObservationTensor());
+        copyFromSim(*buffers++, mgr.ballTensor());
+        copyFromSim(*buffers++, mgr.stepsRemainingTensor());
 
-        void **input_buffers = buffers;
-        void **output_buffers = buffers +
-            src_obs.size() + src_stats.size() + 4;
+        return buffers;
+    }
 
-        if (policy_assignments.has_value()) {
-            output_buffers += 1;
+    virtual void gpuStreamInit(cudaStream_t strm, void **buffers, Manager &mgr)
+    {
+        HeapArray<WorldReset> resets_staging(cfg.numWorlds);
+        for (CountT i = 0; i < (CountT)cfg.numWorlds; i++) {
+            resets_staging[i].reset = 1;
         }
 
-        CountT cur_idx = 0;
+        cudaMemcpyAsync(worldResetBuffer, resets_staging.data(),
+                   sizeof(WorldReset) * cfg.numWorlds,
+                   cudaMemcpyHostToDevice, strm);
 
-        copyToSim(train_iface.actions(), input_buffers[cur_idx++]);
-        copyToSim(train_iface.resets(), input_buffers[cur_idx++]);
+        gpuExec.runAsync(strm);
+        copyOutObservations(strm, buffers, mgr);
+    }
+
+    virtual void gpuStreamStep(cudaStream_t strm, void **buffers, Manager &mgr)
+    {
+        auto copyToSim = [&strm](const Tensor &dst, void *src) {
+            uint64_t num_bytes = numTensorBytes(dst);
+
+            REQ_CUDA(cudaMemcpyAsync(dst.devicePtr(), src, num_bytes,
+                cudaMemcpyDeviceToDevice, strm));
+        };
+
+        copyToSim(mgr.actionTensor(), *buffers++);
+        copyToSim(mgr.resetTensor(), *buffers++);
+
+        if (cfg.numPBTPolicies > 0) {
+            copyToSim(mgr.policyAssignmentsTensor(), *buffers++);
+            copyToSim(mgr.policySimParamsTensor(), *buffers++);
+        }
 
         gpuExec.runAsync(strm);
 
-        copyFromSim(output_buffers[cur_idx++], train_iface.rewards());
-        copyFromSim(output_buffers[cur_idx++], train_iface.dones());
+        buffers = copyOutObservations(strm, buffers, mgr);
 
-        if (policy_assignments.has_value()) {
-            copyFromSim(output_buffers[cur_idx++], *policy_assignments);
-        }
+        auto copyFromSim = [&strm](void *dst, const Tensor &src) {
+            uint64_t num_bytes = numTensorBytes(src);
 
-        for (const TrainInterface::NamedTensor &t : src_obs) {
-            copyFromSim(output_buffers[cur_idx++], t.hdl);
-        }
+            REQ_CUDA(cudaMemcpyAsync(dst, src.devicePtr(), num_bytes,
+                cudaMemcpyDeviceToDevice, strm));
+        };
 
-        for (const TrainInterface::NamedTensor &t : src_stats) {
-            copyFromSim(output_buffers[cur_idx++], t.hdl);
-        }
+        copyFromSim(*buffers++, mgr.rewardTensor());
+        copyFromSim(*buffers++, mgr.doneTensor());
+        copyFromSim(*buffers++, mgr.matchResultTensor());
     }
 #endif
 
+    virtual Tensor policySimParamsTensor() const final
+    {
+        return Tensor(policySimParams, TensorElementType::Float32,
+            {
+                cfg.numPBTPolicies,
+                sizeof(PolicySimParams) / sizeof(float),
+            }, cfg.gpuID);
+    }
+
     virtual inline Tensor exportTensor(ExportID slot,
-        Tensor::ElementType type,
-        madrona::Span<const int64_t> dims) const final
+        TensorElementType type,
+        Span<const int64_t> dims) const final
     {
         void *dev_ptr = gpuExec.getExported((uint32_t)slot);
         return Tensor(dev_ptr, type, dims, cfg.gpuID);
@@ -510,6 +557,22 @@ Manager::Impl * Manager::Impl::init(
         ObjectManager *phys_obj_mgr = &phys_loader.getObjectManager();
         sim_cfg.rigidBodyObjMgr = phys_obj_mgr;
 
+        if (mgr_cfg.numPBTPolicies > 0) {
+            sim_cfg.policySimParams = (PolicySimParams *)cu::allocGPU(
+                sizeof(PolicySimParams) * mgr_cfg.numPBTPolicies);
+        } else {
+            sim_cfg.policySimParams = (PolicySimParams *)cu::allocGPU(
+                sizeof(PolicySimParams));
+
+            PolicySimParams default_policy_sim_params {
+                .teamSpirit = 1.f,
+            };
+
+            REQ_CUDA(cudaMemcpy(sim_cfg.policySimParams,
+                &default_policy_sim_params, sizeof(PolicySimParams),
+                cudaMemcpyHostToDevice));
+        }
+
         Optional<RenderGPUState> render_gpu_state =
             initRenderGPUState(mgr_cfg);
 
@@ -551,6 +614,7 @@ Manager::Impl * Manager::Impl::init(
             std::move(phys_loader),
             world_reset_buffer,
             agent_actions_buffer,
+            sim_cfg.policySimParams,
             std::move(render_gpu_state),
             std::move(render_mgr),
             std::move(gpu_exec),
@@ -565,6 +629,18 @@ Manager::Impl * Manager::Impl::init(
 
         ObjectManager *phys_obj_mgr = &phys_loader.getObjectManager();
         sim_cfg.rigidBodyObjMgr = phys_obj_mgr;
+
+        if (mgr_cfg.numPBTPolicies > 0) {
+            sim_cfg.policySimParams = (PolicySimParams *)malloc(
+                sizeof(PolicySimParams) * mgr_cfg.numPBTPolicies);
+        } else {
+            sim_cfg.policySimParams = (PolicySimParams *)malloc(
+                sizeof(PolicySimParams));
+
+            *(sim_cfg.policySimParams) = {
+                .teamSpirit = 1.f,
+            };
+        }
 
         Optional<RenderGPUState> render_gpu_state =
             initRenderGPUState(mgr_cfg);
@@ -601,6 +677,7 @@ Manager::Impl * Manager::Impl::init(
             std::move(phys_loader),
             world_reset_buffer,
             agent_actions_buffer,
+            sim_cfg.policySimParams,
             std::move(render_gpu_state),
             std::move(render_mgr),
             std::move(cpu_exec),
@@ -615,6 +692,12 @@ Manager::Impl * Manager::Impl::init(
 Manager::Manager(const Config &cfg)
     : impl_(Impl::init(cfg))
 {
+}
+
+Manager::~Manager() {}
+
+void Manager::init()
+{
     // Currently, there is no way to populate the initial set of observations
     // without stepping the simulations in order to execute the taskgraph.
     // Therefore, after setup, we step all the simulations with a forced reset
@@ -624,14 +707,12 @@ Manager::Manager(const Config &cfg)
     // This will be improved in the future with support for multiple task
     // graphs, allowing a small task graph to be executed after initialization.
     
-    for (int32_t i = 0; i < (int32_t)cfg.numWorlds; i++) {
+    for (int32_t i = 0; i < (int32_t)impl_->cfg.numWorlds; i++) {
         triggerReset(i);
     }
 
     step();
 }
-
-Manager::~Manager() {}
 
 void Manager::step()
 {
@@ -647,38 +728,52 @@ void Manager::step()
 }
 
 #ifdef MADRONA_CUDA_SUPPORT
-void Manager::gpuRolloutStep(cudaStream_t strm, void **rollout_buffers)
+void Manager::gpuStreamInit(cudaStream_t strm, void **buffers)
 {
-    TrainInterface iface = trainInterface();
-    impl_->gpuRollout(strm, rollout_buffers, iface);
+    impl_->gpuStreamInit(strm, buffers, *this);
 
     if (impl_->renderMgr.has_value()) {
-        impl_->renderMgr->readECS();
+        assert(false);
     }
+}
 
-    if (impl_->cfg.enableBatchRenderer) {
-        impl_->renderMgr->batchRender();
+void Manager::gpuStreamStep(cudaStream_t strm, void **buffers)
+{
+    impl_->gpuStreamStep(strm, buffers, *this);
+
+    if (impl_->renderMgr.has_value()) {
+        assert(false);
     }
 }
 #endif
 
 TrainInterface Manager::trainInterface() const
 {
+    auto pbt_inputs = std::to_array<NamedTensorInterface>({
+        { "policy_assignments", policyAssignmentsTensor().interface() },
+        { "policy_sim_params", policySimParamsTensor().interface() },
+    });
+
     return TrainInterface {
         {
-            { "self", selfObservationTensor() },
-            { "team", teamObservationTensor() },
-            { "enemy", enemyObservationTensor() },
-            { "ball", ballTensor() },
-            { "stepsRemaining", stepsRemainingTensor() },
+            .actions = actionTensor().interface(),
+            .resets = resetTensor().interface(),
+            .pbt = impl_->cfg.numPBTPolicies > 0 ?
+                pbt_inputs : Span<const NamedTensorInterface>(nullptr, 0),
         },
-        actionTensor(),
-        rewardTensor(),
-        doneTensor(),
-        resetTensor(),
-        Optional<Tensor>::none(),
         {
-            { "matchResult", matchResultTensor() },
+            .observations = {
+                { "self", selfObservationTensor().interface() },
+                { "team", teamObservationTensor().interface() },
+                { "enemy", enemyObservationTensor().interface() },
+                { "ball", ballTensor().interface() },
+                { "stepsRemaining", stepsRemainingTensor().interface() },
+            },
+            .rewards = rewardTensor().interface(),
+            .dones = doneTensor().interface(),
+            .pbt = {
+                { "match_result", matchResultTensor().interface() },
+            },
         },
     };
 }
@@ -686,7 +781,7 @@ TrainInterface Manager::trainInterface() const
 Tensor Manager::resetTensor() const
 {
     return impl_->exportTensor(ExportID::Reset,
-                               Tensor::ElementType::Int32,
+                               TensorElementType::Int32,
                                {
                                    impl_->cfg.numWorlds,
                                    1,
@@ -696,7 +791,7 @@ Tensor Manager::resetTensor() const
 Tensor Manager::matchResultTensor() const
 {
     return impl_->exportTensor(ExportID::MatchResult,
-                               Tensor::ElementType::Int32,
+                               TensorElementType::Int32,
                                {
                                    impl_->cfg.numWorlds,
                                    sizeof(MatchResult) / sizeof(int32_t),
@@ -705,7 +800,7 @@ Tensor Manager::matchResultTensor() const
 
 Tensor Manager::actionTensor() const
 {
-    return impl_->exportTensor(ExportID::Action, Tensor::ElementType::Int32,
+    return impl_->exportTensor(ExportID::Action, TensorElementType::Int32,
         {
             impl_->cfg.numWorlds * consts::numAgents,
             sizeof(Action) / sizeof(int32_t),
@@ -714,7 +809,7 @@ Tensor Manager::actionTensor() const
 
 Tensor Manager::rewardTensor() const
 {
-    return impl_->exportTensor(ExportID::Reward, Tensor::ElementType::Float32,
+    return impl_->exportTensor(ExportID::Reward, TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
                                    1,
@@ -723,7 +818,7 @@ Tensor Manager::rewardTensor() const
 
 Tensor Manager::doneTensor() const
 {
-    return impl_->exportTensor(ExportID::Done, Tensor::ElementType::Int32,
+    return impl_->exportTensor(ExportID::Done, TensorElementType::Int32,
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
                                    1,
@@ -733,7 +828,7 @@ Tensor Manager::doneTensor() const
 Tensor Manager::selfObservationTensor() const
 {
     return impl_->exportTensor(ExportID::SelfObservation,
-                               Tensor::ElementType::Float32,
+                               TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
                                    sizeof(SelfObservation) / sizeof(float),
@@ -743,7 +838,7 @@ Tensor Manager::selfObservationTensor() const
 Tensor Manager::ballTensor() const
 {
     return impl_->exportTensor(ExportID::BallObservation,
-                               Tensor::ElementType::Float32,
+                               TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
                                    1,
@@ -754,7 +849,7 @@ Tensor Manager::ballTensor() const
 Tensor Manager::teamObservationTensor() const
 {
     return impl_->exportTensor(ExportID::TeamObservation,
-                               Tensor::ElementType::Float32,
+                               TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
                                    consts::numCarsPerTeam - 1,
@@ -765,7 +860,7 @@ Tensor Manager::teamObservationTensor() const
 Tensor Manager::enemyObservationTensor() const
 {
     return impl_->exportTensor(ExportID::EnemyObservation,
-                               Tensor::ElementType::Float32,
+                               TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
                                    consts::numCarsPerTeam,
@@ -776,18 +871,33 @@ Tensor Manager::enemyObservationTensor() const
 Tensor Manager::stepsRemainingTensor() const
 {
     return impl_->exportTensor(ExportID::StepsRemaining,
-                               Tensor::ElementType::Int32,
+                               TensorElementType::Int32,
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
                                    1,
                                });
 }
 
+Tensor Manager::policyAssignmentsTensor() const
+{
+    return impl_->exportTensor(ExportID::CarPolicy,
+                               TensorElementType::Int32,
+                               {
+                                   impl_->cfg.numWorlds * consts::numAgents,
+                                   1,
+                               });
+}
+
+Tensor Manager::policySimParamsTensor() const
+{
+    return impl_->policySimParamsTensor();
+}
+
 Tensor Manager::rgbTensor() const
 {
     const uint8_t *rgb_ptr = impl_->renderMgr->batchRendererRGBOut();
 
-    return Tensor((void*)rgb_ptr, Tensor::ElementType::UInt8, {
+    return Tensor((void*)rgb_ptr, TensorElementType::UInt8, {
         impl_->cfg.numWorlds,
         consts::numAgents,
         impl_->cfg.batchRenderViewHeight,
@@ -800,7 +910,7 @@ Tensor Manager::depthTensor() const
 {
     const float *depth_ptr = impl_->renderMgr->batchRendererDepthOut();
 
-    return Tensor((void *)depth_ptr, Tensor::ElementType::Float32, {
+    return Tensor((void *)depth_ptr, TensorElementType::Float32, {
         impl_->cfg.numWorlds,
         consts::numAgents,
         impl_->cfg.batchRenderViewHeight,

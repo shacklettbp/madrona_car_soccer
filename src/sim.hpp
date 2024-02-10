@@ -24,6 +24,7 @@ enum class ExportID : uint32_t {
     TeamObservation,
     EnemyObservation,
     StepsRemaining,
+    CarPolicy,
     NumExports,
 };
 
@@ -53,6 +54,7 @@ struct Sim : public madrona::WorldBase {
         bool autoReset;
         RandKey initRandKey;
         madrona::phys::ObjectManager *rigidBodyObjMgr;
+        PolicySimParams *policySimParams;
         const madrona::render::RenderECSBridge *renderBridge;
     };
 
@@ -84,6 +86,8 @@ struct Sim : public madrona::WorldBase {
     // Should the environment automatically reset (generate a new episode)
     // at the end of each episode?
     bool autoReset;
+
+    PolicySimParams *policySimParams;
 
     // Are we enabling rendering? (whether with the viewer or not)
     bool enableRender;

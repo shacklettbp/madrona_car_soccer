@@ -21,6 +21,7 @@ public:
         uint32_t numWorlds; // Simulation batch size
         uint32_t randSeed; // Seed for random world gen
         bool autoReset; // Immediately generate new world on episode end
+        uint32_t numPBTPolicies;
         bool enableBatchRenderer;
         uint32_t batchRenderViewWidth = 64;
         uint32_t batchRenderViewHeight = 64;
@@ -31,7 +32,13 @@ public:
     Manager(const Config &cfg);
     ~Manager();
 
+    void init();
     void step();
+
+#ifdef MADRONA_CUDA_SUPPORT
+    void gpuStreamInit(cudaStream_t strm, void **buffers);
+    void gpuStreamStep(cudaStream_t strm, void **buffers);
+#endif
 
     // These functions export Tensor objects that link the ECS
     // simulation state to the python bindings / PyTorch tensors (src/bindings.cpp)
@@ -45,6 +52,8 @@ public:
     madrona::py::Tensor teamObservationTensor() const;
     madrona::py::Tensor enemyObservationTensor() const;
     madrona::py::Tensor stepsRemainingTensor() const;
+    madrona::py::Tensor policyAssignmentsTensor() const;
+    madrona::py::Tensor policySimParamsTensor() const;
     madrona::py::Tensor rgbTensor() const;
     madrona::py::Tensor depthTensor() const;
     madrona::py::TrainInterface trainInterface() const;
@@ -58,10 +67,6 @@ public:
                    int32_t rotate);
 
     madrona::render::RenderManager & getRenderManager();
-
-#ifdef MADRONA_CUDA_SUPPORT
-    void gpuRolloutStep(cudaStream_t strm, void **rollout_buffers);
-#endif
 
 private:
     struct Impl;

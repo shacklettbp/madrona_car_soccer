@@ -42,7 +42,7 @@ arg_parser.add_argument('--separate-value', action='store_true')
 arg_parser.add_argument('--fp16', action='store_true')
 arg_parser.add_argument('--bf16', action='store_true')
 
-arg_parser.add_argument('--pbt-ensemble-size', type=int, default=1)
+arg_parser.add_argument('--pbt-ensemble-size', type=int, default=0)
 arg_parser.add_argument('--pbt-past-policies', type=int, default=0)
 
 arg_parser.add_argument('--gpu-sim', action='store_true')
@@ -55,12 +55,13 @@ sim = madrona_rocket_league.SimManager(
     gpu_id = args.gpu_id,
     num_worlds = args.num_worlds,
     auto_reset = True,
+    num_pbt_policies = args.pbt_ensemble_size + args.pbt_past_policies,
     rand_seed = 5,
 )
 
 jax_gpu = jax.devices()[0].platform == 'gpu'
 
-sim_step, init_sim_data = sim.jax(jax_gpu)
+sim_init, sim_step = sim.jax(jax_gpu)
 
 def metrics_cb(metrics, epoch, mb, train_state):
     return metrics
@@ -108,7 +109,7 @@ def iter_cb(update_idx, metrics, train_state_mgr):
 
 dev = jax.devices()[0]
 
-if args.pbt_ensemble_size != 1 or args.pbt_past_policies != 0:
+if args.pbt_ensemble_size != 0:
     pbt_cfg = PBTConfig(
         num_teams = 2,
         team_size = 3,
@@ -164,8 +165,9 @@ if args.restore:
 else:
     restore_ckpt = None
 
-madrona_learn.train(dev, cfg, sim_step, init_sim_data, policy, obs_preprocess,
-    iter_cb, CustomMetricConfig(add_metrics = lambda metrics: metrics),
+madrona_learn.train(dev, cfg, sim_init, sim_step,
+    policy, obs_preprocess, iter_cb,
+    CustomMetricConfig(add_metrics = lambda metrics: metrics),
     restore_ckpt = restore_ckpt, profile_port = args.profile_port)
 
 del sim

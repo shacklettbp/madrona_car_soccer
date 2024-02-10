@@ -53,6 +53,10 @@ struct Done {
     int32_t v;
 };
 
+static_assert(sizeof(WorldReset) == sizeof(int32_t));
+static_assert(sizeof(Reward) == sizeof(float));
+static_assert(sizeof(Done) == sizeof(int32_t));
+
 struct MatchResult {
     int32_t winningTeam;
     int32_t numTeamAGoals;
@@ -63,12 +67,20 @@ struct MatchInfo {
     int32_t stepsRemaining;
 };
 
-static_assert(sizeof(WorldReset) == sizeof(int32_t));
-static_assert(sizeof(Reward) == sizeof(float));
-static_assert(sizeof(Done) == sizeof(float));
+struct TeamRewardState {
+    float teamRewards[consts::numTeams];
+};
 
 struct PolarObservation {
     float r, theta, phi;
+};
+
+struct PolicySimParams {
+    float teamSpirit;
+};
+
+struct CarPolicy {
+    int32_t policyIdx;
 };
 
 // Observation state for the current agent.
@@ -221,7 +233,7 @@ struct TeamState {
 };
 
 struct CarBallTouchState {
-    int32_t touched;
+    bool touched;
 };
 
 /* ECS Archetypes for the game */
@@ -271,6 +283,8 @@ struct Car : public madrona::Archetype<
     DynamicEntityType,
     TeamState,
     CarBallTouchState,
+
+    CarPolicy,
 
     // Observations
     SelfObservation,

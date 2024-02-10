@@ -40,6 +40,7 @@ sim = madrona_rocket_league.SimManager(
     exec_mode = madrona_rocket_league.madrona.ExecMode.CUDA if args.gpu_sim else madrona_rocket_league.madrona.ExecMode.CPU,
     gpu_id = args.gpu_id,
     num_worlds = args.num_worlds,
+    num_pbt_policies = 0,
     auto_reset = True,
     rand_seed = 5,
 )
@@ -51,7 +52,7 @@ num_agents_per_world = team_size * num_teams
 
 jax_gpu = jax.devices()[0].platform == 'gpu'
 
-sim_step, init_sim_data = sim.jax(jax_gpu)
+sim_init, sim_step = sim.jax(jax_gpu)
 
 if args.action_dump_path:
     action_log = open(args.action_dump_path, 'wb')
@@ -110,23 +111,28 @@ else:
 
 policy, obs_preprocess = make_policy(dtype)
 
-single_policy_cfg = None
-multi_policy_cfg = None
+single_policy_eval = None
+multi_policy_eval = None
 
 if args.single_policy != None:
     assert not args.crossplay
-
-    single_policy_cfg = madrona_learn.SinglePolicyEvalConfig(
-        policy_idx = args.single_policy,
-    )
+    single_policy_eval = args.single_policy
 elif args.crossplay:
-    multi_policy_cfg = madrona_learn.MultiPolicyEvalConfig(
+    multi_policy_eval = madrona_learn.MultiPolicyEvalConfig(
         num_teams = num_teams,
         team_size = team_size,
     )
 
-madrona_learn.eval_ckpt(dev, args.ckpt_path, args.num_steps, sim_step,
-    init_sim_data, policy, obs_preprocess, iter_cb, dtype,
-    single_policy_cfg, multi_policy_cfg)
+madrona_learn.eval_ckpt(dev, madrona_learn.EvalConfig(
+        ckpt_path = args.ckpt_path,
+        num_worlds = args.num_worlds,
+        num_agents_per_world = team_size * num_teams,
+        num_eval_steps = args.num_steps,
+        policy_dtype = dtype,
+        single_policy_eval = single_policy_eval,
+        multi_policy_eval = multi_policy_eval,
+    ),
+    sim_init, sim_step, policy, obs_preprocess, iter_cb,
+)
 
 del sim

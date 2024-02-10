@@ -211,6 +211,10 @@ void createPersistentEntities(Engine &ctx)
             ctx.get<EntityType>(car) = EntityType::Agent;
             ctx.get<DynamicEntityType>(car) = DynamicEntityType::Car;
             ctx.get<TeamState>(car).teamIdx = team_idx;
+
+            // This needs to be initialized for the viewer, which won't pass
+            // in a legitimate policyIdx.
+            ctx.get<CarPolicy>(car).policyIdx = 0;
         }
     }
 

@@ -43,10 +43,12 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<CollisionData>();
     registry.registerComponent<TeamState>();
     registry.registerComponent<CarBallTouchState>();
+    registry.registerComponent<CarPolicy>();
 
     registry.registerSingleton<WorldReset>();
     registry.registerSingleton<MatchInfo>();
     registry.registerSingleton<MatchResult>();
+    registry.registerSingleton<TeamRewardState>();
 
     registry.registerArchetype<PhysicsEntity>();
     registry.registerArchetype<Car>();
@@ -64,6 +66,9 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
         (uint32_t)ExportID::StepsRemaining);
     registry.exportColumn<Car, Reward>((uint32_t)ExportID::Reward);
     registry.exportColumn<Car, Done>((uint32_t)ExportID::Done);
+
+    registry.exportColumn<Car, CarPolicy>(
+        (uint32_t)ExportID::CarPolicy);
 }
 
 static inline void cleanupWorld(Engine &ctx)
@@ -128,7 +133,7 @@ inline void carMovementSystem(Engine &engine,
                               Velocity &vel,
                               CarBallTouchState &touch_state)
 {
-    touch_state.touched = 0;
+    touch_state.touched = false;
 
     constexpr float move_angle_per_bucket =
         3.f * math::pi / float(consts::numTurnBuckets);
@@ -183,7 +188,7 @@ inline void carMovementSystem(Engine &engine,
             Loc loc = engine.makeTemporary<Collision>();
             engine.get<CollisionData>(loc) = collision;
 
-            touch_state.touched = 1;
+            touch_state.touched = true;
         }
     }
 
@@ -532,13 +537,21 @@ inline void collectCarObservationSystem(
     steps_remaining_ob.t = engine.singleton<MatchInfo>().stepsRemaining;
 }
 
-inline void rewardSystem(Engine &engine,
-                         Entity e,
-                         Position pos,
-                         Rotation rot,
-                         TeamState team_state,
-                         CarBallTouchState touch_state,
-                         Reward &reward_out)
+inline void updateResultsSystem(Engine &ctx,
+                                MatchResult &match_result)
+{
+    (void)ctx;
+    (void)match_result;
+}
+
+inline void individualRewardSystem(
+    Engine &engine,
+    Entity e,
+    Position pos,
+    Rotation rot,
+    TeamState team_state,
+    CarBallTouchState touch_state,
+    Reward &reward_out)
 {
     float reward = 0.f;
 
@@ -548,7 +561,22 @@ inline void rewardSystem(Engine &engine,
 
     Team &my_team = engine.data().teams[team_state.teamIdx];
 
+    if (touch_state.touched == 1) {
+        reward += 0.1f;
+    }
 
+    // 2) Goal scored
+    if (ball_gs.state == BallGoalState::State::InGoal) {
+        if (ball_gs.data == team_state.teamIdx) {
+            reward += 5.f;
+        } else {
+            reward -= 5.f;
+        }
+    }
+
+    reward_out.v = reward;
+
+#if 0
 #if 0
     Vector3 car_fwd = rot.rotateVec({0.f, 1.f, 0.f});
 
@@ -615,6 +643,47 @@ inline void rewardSystem(Engine &engine,
     }
 
     reward_out.v = reward;
+#endif
+}
+
+inline void teamRewardSystem(Engine &ctx,
+                             TeamRewardState &team_reward_state)
+{
+    for (CountT team_idx = 0; team_idx < consts::numTeams; team_idx++) {
+        const Team &team = ctx.data().teams[team_idx];
+
+        float reward_sum = 0.f;
+        for (CountT car_idx = 0; car_idx < consts::numCarsPerTeam; car_idx++) {
+            Entity car = team.players[car_idx];
+
+            float car_reward = ctx.get<Reward>(car).v;
+
+            reward_sum += car_reward;
+        }
+
+        float avg_reward = reward_sum / float(consts::numCarsPerTeam);
+        team_reward_state.teamRewards[team_idx] = avg_reward;
+    }
+}
+
+inline void finalRewardSystem(Engine &ctx,
+                              TeamState team,
+                              const CarPolicy &car_policy,
+                              Reward &reward)
+{
+    float my_reward = reward.v;
+
+    TeamRewardState &team_rewards = ctx.singleton<TeamRewardState>();
+    float team_reward = team_rewards.teamRewards[team.teamIdx];
+    float other_team_reward = team_rewards.teamRewards[team.teamIdx ^ 1];
+
+    const PolicySimParams &policy_sim_params = ctx.data().policySimParams[
+        car_policy.policyIdx];
+
+    float team_spirit = policy_sim_params.teamSpirit;
+
+    reward.v = my_reward * (1.f - team_spirit) + team_reward * team_spirit -
+        other_team_reward;
 }
 
 // Keep track of the number of steps remaining in the episode and
@@ -699,21 +768,38 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             Velocity
         >>({clear_colisions});
 
-    auto reward_sys = builder.addToGraph<ParallelForNode<Engine,
-        rewardSystem,
+    auto update_results_sys = builder.addToGraph<ParallelForNode<Engine,
+        updateResultsSystem,
+            MatchResult
+        >>({velocity_correct_system});
+
+    auto individual_reward_sys = builder.addToGraph<ParallelForNode<Engine,
+        individualRewardSystem,
             Entity,
             Position,
             Rotation,
             TeamState,
             CarBallTouchState,
             Reward
-        >>({velocity_correct_system});
+        >>({update_results_sys});
+
+    auto team_reward_sys = builder.addToGraph<ParallelForNode<Engine,
+        teamRewardSystem,
+            TeamRewardState
+        >>({individual_reward_sys});
+
+    auto final_reward_sys = builder.addToGraph<ParallelForNode<Engine,
+        finalRewardSystem,
+            TeamState,
+            CarPolicy,
+            Reward
+        >>({team_reward_sys});
 
     // Check if the episode is over
     auto done_sys = builder.addToGraph<ParallelForNode<Engine,
         writeDonesSystem,
             Done
-        >>({reward_sys});
+        >>({final_reward_sys});
 
     // Conditionally reset the world if the episode is over
     auto reset_sys = builder.addToGraph<ParallelForNode<Engine,
@@ -774,6 +860,7 @@ Sim::Sim(Engine &ctx,
 
     initRandKey = cfg.initRandKey;
     autoReset = cfg.autoReset;
+    policySimParams = cfg.policySimParams;
 
     enableRender = cfg.renderBridge != nullptr;
 

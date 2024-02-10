@@ -23,6 +23,7 @@ NB_MODULE(madrona_rocket_league, m) {
                             int64_t num_worlds,
                             int64_t rand_seed,
                             bool auto_reset,
+                            uint32_t num_pbt_policies,
                             bool enable_batch_renderer) {
             new (self) Manager(Manager::Config {
                 .execMode = exec_mode,
@@ -30,6 +31,7 @@ NB_MODULE(madrona_rocket_league, m) {
                 .numWorlds = (uint32_t)num_worlds,
                 .randSeed = (uint32_t)rand_seed,
                 .autoReset = auto_reset,
+                .numPBTPolicies = num_pbt_policies,
                 .enableBatchRenderer = enable_batch_renderer,
             });
         }, nb::arg("exec_mode"),
@@ -37,6 +39,7 @@ NB_MODULE(madrona_rocket_league, m) {
            nb::arg("num_worlds"),
            nb::arg("rand_seed"),
            nb::arg("auto_reset"),
+           nb::arg("num_pbt_policies"),
            nb::arg("enable_batch_renderer") = false)
         .def("step", &Manager::step)
         .def("reset_tensor", &Manager::resetTensor)
@@ -52,9 +55,12 @@ NB_MODULE(madrona_rocket_league, m) {
         .def("depth_tensor", &Manager::depthTensor)
         .def("jax", JAXInterface::buildEntry<
                 &Manager::trainInterface,
+                &Manager::init,
                 &Manager::step
 #ifdef MADRONA_CUDA_SUPPORT
-                , &Manager::gpuRolloutStep
+                ,
+                &Manager::gpuStreamInit,
+                &Manager::gpuStreamStep
 #endif
              >())
     ;
