@@ -53,7 +53,7 @@ public:
     madrona::py::Tensor enemyObservationTensor() const;
     madrona::py::Tensor stepsRemainingTensor() const;
     madrona::py::Tensor policyAssignmentsTensor() const;
-    madrona::py::Tensor policySimParamsTensor() const;
+    madrona::py::Tensor rewardHyperParamsTensor() const;
     madrona::py::Tensor rgbTensor() const;
     madrona::py::Tensor depthTensor() const;
     madrona::py::TrainInterface trainInterface() const;

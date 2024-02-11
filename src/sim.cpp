@@ -92,7 +92,7 @@ static inline void initWorld(Engine &ctx)
 
 inline void matchInfoSystem(Engine &, MatchInfo &match_info)
 {
-    match_info.stepsRemaining -= 1;
+    //match_info.stepsRemaining -= 1;
 }
 
 // This system runs each frame and checks if the current episode is complete
@@ -677,10 +677,10 @@ inline void finalRewardSystem(Engine &ctx,
     float team_reward = team_rewards.teamRewards[team.teamIdx];
     float other_team_reward = team_rewards.teamRewards[team.teamIdx ^ 1];
 
-    const PolicySimParams &policy_sim_params = ctx.data().policySimParams[
+    const RewardHyperParams &reward_hyper_params = ctx.data().rewardHyperParams[
         car_policy.policyIdx];
 
-    float team_spirit = policy_sim_params.teamSpirit;
+    float team_spirit = reward_hyper_params.teamSpirit;
 
     reward.v = my_reward * (1.f - team_spirit) + team_reward * team_spirit -
         other_team_reward;
@@ -692,6 +692,7 @@ inline void finalRewardSystem(Engine &ctx,
 inline void writeDonesSystem(Engine &ctx,
                              Done &done)
 {
+    done.v = 0;
     int32_t steps_remaining = ctx.singleton<MatchInfo>().stepsRemaining == 0;
     if (steps_remaining == 0 || ctx.singleton<WorldReset>().reset == 1) {
         done.v = 1;
@@ -860,7 +861,7 @@ Sim::Sim(Engine &ctx,
 
     initRandKey = cfg.initRandKey;
     autoReset = cfg.autoReset;
-    policySimParams = cfg.policySimParams;
+    rewardHyperParams = cfg.rewardHyperParams;
 
     enableRender = cfg.renderBridge != nullptr;
 

@@ -54,7 +54,7 @@ struct Sim : public madrona::WorldBase {
         bool autoReset;
         RandKey initRandKey;
         madrona::phys::ObjectManager *rigidBodyObjMgr;
-        PolicySimParams *policySimParams;
+        RewardHyperParams *rewardHyperParams;
         const madrona::render::RenderECSBridge *renderBridge;
     };
 
@@ -87,7 +87,7 @@ struct Sim : public madrona::WorldBase {
     // at the end of each episode?
     bool autoReset;
 
-    PolicySimParams *policySimParams;
+    RewardHyperParams *rewardHyperParams;
 
     // Are we enabling rendering? (whether with the viewer or not)
     bool enableRender;

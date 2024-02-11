@@ -129,7 +129,7 @@ struct Manager::Impl {
         TensorElementType type,
         madrona::Span<const int64_t> dimensions) const = 0;
 
-    virtual Tensor policySimParamsTensor() const = 0;
+    virtual Tensor rewardHyperParamsTensor() const = 0;
 
     static inline Impl * init(const Config &cfg);
 };
@@ -139,13 +139,13 @@ struct Manager::CPUImpl final : Manager::Impl {
         TaskGraphExecutor<Engine, Sim, Sim::Config, Sim::WorldInit>;
 
     TaskGraphT cpuExec;
-    PolicySimParams *policySimParams;
+    RewardHyperParams *rewardHyperParams;
 
     inline CPUImpl(const Manager::Config &mgr_cfg,
                    PhysicsLoader &&phys_loader,
                    WorldReset *reset_buffer,
                    Action *action_buffer,
-                   PolicySimParams *policy_sim_params,
+                   RewardHyperParams *reward_hyper_params,
                    Optional<RenderGPUState> &&render_gpu_state,
                    Optional<render::RenderManager> &&render_mgr,
                    TaskGraphT &&cpu_exec)
@@ -153,12 +153,12 @@ struct Manager::CPUImpl final : Manager::Impl {
                reset_buffer, action_buffer,
                std::move(render_gpu_state), std::move(render_mgr)),
           cpuExec(std::move(cpu_exec)),
-          policySimParams(policy_sim_params)
+          rewardHyperParams(reward_hyper_params)
     {}
 
     inline virtual ~CPUImpl() final
     {
-        free(policySimParams);
+        free(rewardHyperParams);
     }
 
     inline virtual void run()
@@ -178,12 +178,12 @@ struct Manager::CPUImpl final : Manager::Impl {
     }
 #endif
 
-    virtual Tensor policySimParamsTensor() const final
+    virtual Tensor rewardHyperParamsTensor() const final
     {
-        return Tensor(policySimParams, TensorElementType::Float32,
+        return Tensor(rewardHyperParams, TensorElementType::Float32,
             {
                 cfg.numPBTPolicies,
-                sizeof(PolicySimParams) / sizeof(float),
+                sizeof(RewardHyperParams) / sizeof(float),
             }, Optional<int>::none());
     }
 
@@ -199,13 +199,13 @@ struct Manager::CPUImpl final : Manager::Impl {
 #ifdef MADRONA_CUDA_SUPPORT
 struct Manager::CUDAImpl final : Manager::Impl {
     MWCudaExecutor gpuExec;
-    PolicySimParams *policySimParams;
+    RewardHyperParams *rewardHyperParams;
 
     inline CUDAImpl(const Manager::Config &mgr_cfg,
                    PhysicsLoader &&phys_loader,
                    WorldReset *reset_buffer,
                    Action *action_buffer,
-                   PolicySimParams *policy_sim_params,
+                   RewardHyperParams *reward_hyper_params,
                    Optional<RenderGPUState> &&render_gpu_state,
                    Optional<render::RenderManager> &&render_mgr,
                    MWCudaExecutor &&gpu_exec)
@@ -213,12 +213,12 @@ struct Manager::CUDAImpl final : Manager::Impl {
                reset_buffer, action_buffer,
                std::move(render_gpu_state), std::move(render_mgr)),
           gpuExec(std::move(gpu_exec)),
-          policySimParams(policy_sim_params)
+          rewardHyperParams(reward_hyper_params)
     {}
 
     inline virtual ~CUDAImpl() final
     {
-        REQ_CUDA(cudaFree(policySimParams));
+        REQ_CUDA(cudaFree(rewardHyperParams));
     }
 
     inline virtual void run()
@@ -275,7 +275,7 @@ struct Manager::CUDAImpl final : Manager::Impl {
 
         if (cfg.numPBTPolicies > 0) {
             copyToSim(mgr.policyAssignmentsTensor(), *buffers++);
-            copyToSim(mgr.policySimParamsTensor(), *buffers++);
+            copyToSim(mgr.rewardHyperParamsTensor(), *buffers++);
         }
 
         gpuExec.runAsync(strm);
@@ -295,12 +295,12 @@ struct Manager::CUDAImpl final : Manager::Impl {
     }
 #endif
 
-    virtual Tensor policySimParamsTensor() const final
+    virtual Tensor rewardHyperParamsTensor() const final
     {
-        return Tensor(policySimParams, TensorElementType::Float32,
+        return Tensor(rewardHyperParams, TensorElementType::Float32,
             {
                 cfg.numPBTPolicies,
-                sizeof(PolicySimParams) / sizeof(float),
+                sizeof(RewardHyperParams) / sizeof(float),
             }, cfg.gpuID);
     }
 
@@ -558,18 +558,18 @@ Manager::Impl * Manager::Impl::init(
         sim_cfg.rigidBodyObjMgr = phys_obj_mgr;
 
         if (mgr_cfg.numPBTPolicies > 0) {
-            sim_cfg.policySimParams = (PolicySimParams *)cu::allocGPU(
-                sizeof(PolicySimParams) * mgr_cfg.numPBTPolicies);
+            sim_cfg.rewardHyperParams = (RewardHyperParams *)cu::allocGPU(
+                sizeof(RewardHyperParams) * mgr_cfg.numPBTPolicies);
         } else {
-            sim_cfg.policySimParams = (PolicySimParams *)cu::allocGPU(
-                sizeof(PolicySimParams));
+            sim_cfg.rewardHyperParams = (RewardHyperParams *)cu::allocGPU(
+                sizeof(RewardHyperParams));
 
-            PolicySimParams default_policy_sim_params {
-                .teamSpirit = 1.f,
+            RewardHyperParams default_reward_hyper_params {
+                .teamSpirit = 0.f,
             };
 
-            REQ_CUDA(cudaMemcpy(sim_cfg.policySimParams,
-                &default_policy_sim_params, sizeof(PolicySimParams),
+            REQ_CUDA(cudaMemcpy(sim_cfg.rewardHyperParams,
+                &default_reward_hyper_params, sizeof(RewardHyperParams),
                 cudaMemcpyHostToDevice));
         }
 
@@ -614,7 +614,7 @@ Manager::Impl * Manager::Impl::init(
             std::move(phys_loader),
             world_reset_buffer,
             agent_actions_buffer,
-            sim_cfg.policySimParams,
+            sim_cfg.rewardHyperParams,
             std::move(render_gpu_state),
             std::move(render_mgr),
             std::move(gpu_exec),
@@ -631,14 +631,14 @@ Manager::Impl * Manager::Impl::init(
         sim_cfg.rigidBodyObjMgr = phys_obj_mgr;
 
         if (mgr_cfg.numPBTPolicies > 0) {
-            sim_cfg.policySimParams = (PolicySimParams *)malloc(
-                sizeof(PolicySimParams) * mgr_cfg.numPBTPolicies);
+            sim_cfg.rewardHyperParams = (RewardHyperParams *)malloc(
+                sizeof(RewardHyperParams) * mgr_cfg.numPBTPolicies);
         } else {
-            sim_cfg.policySimParams = (PolicySimParams *)malloc(
-                sizeof(PolicySimParams));
+            sim_cfg.rewardHyperParams = (RewardHyperParams *)malloc(
+                sizeof(RewardHyperParams));
 
-            *(sim_cfg.policySimParams) = {
-                .teamSpirit = 1.f,
+            *(sim_cfg.rewardHyperParams) = {
+                .teamSpirit = 0.f,
             };
         }
 
@@ -677,7 +677,7 @@ Manager::Impl * Manager::Impl::init(
             std::move(phys_loader),
             world_reset_buffer,
             agent_actions_buffer,
-            sim_cfg.policySimParams,
+            sim_cfg.rewardHyperParams,
             std::move(render_gpu_state),
             std::move(render_mgr),
             std::move(cpu_exec),
@@ -751,7 +751,7 @@ TrainInterface Manager::trainInterface() const
 {
     auto pbt_inputs = std::to_array<NamedTensorInterface>({
         { "policy_assignments", policyAssignmentsTensor().interface() },
-        { "policy_sim_params", policySimParamsTensor().interface() },
+        { "reward_hyper_params", rewardHyperParamsTensor().interface() },
     });
 
     return TrainInterface {
@@ -888,9 +888,9 @@ Tensor Manager::policyAssignmentsTensor() const
                                });
 }
 
-Tensor Manager::policySimParamsTensor() const
+Tensor Manager::rewardHyperParamsTensor() const
 {
-    return impl_->policySimParamsTensor();
+    return impl_->rewardHyperParamsTensor();
 }
 
 Tensor Manager::rgbTensor() const

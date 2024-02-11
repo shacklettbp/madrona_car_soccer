@@ -75,7 +75,7 @@ struct PolarObservation {
     float r, theta, phi;
 };
 
-struct PolicySimParams {
+struct RewardHyperParams {
     float teamSpirit;
 };
 
