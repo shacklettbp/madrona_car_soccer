@@ -557,9 +557,6 @@ inline void individualRewardSystem(
 
     Entity ball_entity = engine.data().ball;
     BallGoalState &ball_gs = engine.get<BallGoalState>(ball_entity);
-    Position ball_pos = engine.get<Position>(ball_entity);
-
-    Team &my_team = engine.data().teams[team_state.teamIdx];
 
     if (touch_state.touched == 1) {
         reward += 0.1f;
@@ -671,6 +668,7 @@ inline void finalRewardSystem(Engine &ctx,
                               const CarPolicy &car_policy,
                               Reward &reward)
 {
+    return;
     float my_reward = reward.v;
 
     TeamRewardState &team_rewards = ctx.singleton<TeamRewardState>();
@@ -692,13 +690,13 @@ inline void finalRewardSystem(Engine &ctx,
 inline void writeDonesSystem(Engine &ctx,
                              Done &done)
 {
-    done.v = 0;
     int32_t steps_remaining = ctx.singleton<MatchInfo>().stepsRemaining == 0;
     if (steps_remaining == 0 || ctx.singleton<WorldReset>().reset == 1) {
         done.v = 1;
     } else if (steps_remaining == consts::episodeLen - 1) {
         done.v = 0;
     }
+    done.v = 0;
 }
 
 // Helper function for sorting nodes in the taskgraph.
