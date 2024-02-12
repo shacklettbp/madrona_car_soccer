@@ -8,6 +8,7 @@
 
 #include "consts.hpp"
 #include "physics.hpp"
+#include "sim_flags.hpp"
 
 namespace madEscape {
 
@@ -58,7 +59,7 @@ static_assert(sizeof(Reward) == sizeof(float));
 static_assert(sizeof(Done) == sizeof(int32_t));
 
 struct MatchResult {
-    int32_t winningTeam;
+    int32_t winResult;
     int32_t numTeamAGoals;
     int32_t numTeamBGoals;
 };

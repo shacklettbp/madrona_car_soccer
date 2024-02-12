@@ -5,6 +5,8 @@
 
 #include <madrona/render/render_mgr.hpp>
 
+#include "sim_flags.hpp"
+
 namespace madEscape {
 
 // The Manager class encapsulates the linkage between the outside training
@@ -21,6 +23,7 @@ public:
         uint32_t numWorlds; // Simulation batch size
         uint32_t randSeed; // Seed for random world gen
         bool autoReset; // Immediately generate new world on episode end
+        SimFlags simFlags;
         uint32_t numPBTPolicies;
         bool enableBatchRenderer;
         uint32_t batchRenderViewWidth = 64;

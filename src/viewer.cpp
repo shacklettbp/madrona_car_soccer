@@ -85,11 +85,13 @@ int main(int argc, char *argv[])
         .numWorlds = num_worlds,
         .randSeed = 5,
         .autoReset = replay_log.has_value(),
+        .simFlags = SimFlags::Default,
         .numPBTPolicies = 0,
         .enableBatchRenderer = enable_batch_renderer,
         .extRenderAPI = wm.gpuAPIManager().backend(),
         .extRenderDev = render_gpu.device(),
     });
+    mgr.init();
 
     float camera_move_speed = 10.f;
 

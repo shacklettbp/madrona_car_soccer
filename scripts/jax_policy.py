@@ -11,7 +11,7 @@ import math
 
 import madrona_learn
 from madrona_learn import (
-    ActorCritic, BackboneShared, BackboneSeparate,
+    Policy, ActorCritic, BackboneShared, BackboneSeparate,
     BackboneEncoder, RecurrentBackboneEncoder,
     ObservationsEMANormalizer, ObservationsCaster,
 )
@@ -202,7 +202,7 @@ def make_policy(dtype):
         critic_encoder = critic_encoder,
     )
 
-    policy = ActorCritic(
+    actor_critic = ActorCritic(
         backbone = backbone,
         actor = DenseLayerDiscreteActor(
             actions_num_buckets = [3, 3],
@@ -218,4 +218,26 @@ def make_policy(dtype):
         skip_normalization = {},
     )
 
-    return policy, obs_preprocess
+    def init_reward_hyper_params(rnd):
+        return random.uniform(rnd, (1,), dtype=jnp.float32, minval=0, maxval=1)
+
+    def mutate_reward_hyper_params(rnd, cur):
+        return jnp.clip(
+            a = cur + random.uniform(rnd, (1,), dtype=jnp.float32,
+                                     minval=-0.1, maxval=0.1),
+            a_min = 0,
+            a_max = 1,
+        )
+
+    def parse_match_result(match_result):
+        return match_result[..., 0]
+
+    return Policy(
+        actor_critic = actor_critic,
+        obs_preprocess = obs_preprocess,
+        init_reward_hyper_params = init_reward_hyper_params,
+        mutate_reward_hyper_params = mutate_reward_hyper_params,
+        parse_match_result = parse_match_result,
+    )
+
+    return policy

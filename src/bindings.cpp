@@ -16,6 +16,11 @@ NB_MODULE(madrona_rocket_league, m) {
     // like madrona::py::Tensor and madrona::py::PyExecMode.
     madrona::py::setupMadronaSubmodule(m);
 
+    nb::enum_<SimFlags>(m, "SimFlags", nb::is_arithmetic())
+        .value("Default", SimFlags::Default)
+        .value("StaggerStarts", SimFlags::StaggerStarts)
+    ;
+
     nb::class_<Manager> (m, "SimManager")
         .def("__init__", [](Manager *self,
                             madrona::py::PyExecMode exec_mode,
@@ -23,6 +28,7 @@ NB_MODULE(madrona_rocket_league, m) {
                             int64_t num_worlds,
                             int64_t rand_seed,
                             bool auto_reset,
+                            uint32_t sim_flags,
                             uint32_t num_pbt_policies,
                             bool enable_batch_renderer) {
             new (self) Manager(Manager::Config {
@@ -31,6 +37,7 @@ NB_MODULE(madrona_rocket_league, m) {
                 .numWorlds = (uint32_t)num_worlds,
                 .randSeed = (uint32_t)rand_seed,
                 .autoReset = auto_reset,
+                .simFlags = SimFlags(sim_flags),
                 .numPBTPolicies = num_pbt_policies,
                 .enableBatchRenderer = enable_batch_renderer,
             });
@@ -39,6 +46,7 @@ NB_MODULE(madrona_rocket_league, m) {
            nb::arg("num_worlds"),
            nb::arg("rand_seed"),
            nb::arg("auto_reset"),
+           nb::arg("sim_flags"),
            nb::arg("num_pbt_policies"),
            nb::arg("enable_batch_renderer") = false)
         .def("step", &Manager::step)

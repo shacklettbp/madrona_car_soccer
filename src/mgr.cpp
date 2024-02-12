@@ -253,11 +253,45 @@ struct Manager::CUDAImpl final : Manager::Impl {
             resets_staging[i].reset = 1;
         }
 
-        cudaMemcpyAsync(worldResetBuffer, resets_staging.data(),
-                   sizeof(WorldReset) * cfg.numWorlds,
-                   cudaMemcpyHostToDevice, strm);
+        auto uploadResets = [&]()
+        {
+            cudaMemcpyAsync(worldResetBuffer, resets_staging.data(),
+                       sizeof(WorldReset) * cfg.numWorlds,
+                       cudaMemcpyHostToDevice, strm);
+        };
 
+        uploadResets();
         gpuExec.runAsync(strm);
+
+
+        if ((cfg.simFlags & SimFlags::StaggerStarts) ==
+                SimFlags::StaggerStarts) {
+            int32_t worlds_per_step = madrona::utils::divideRoundUp(
+                (int32_t)cfg.numWorlds, (int32_t)consts::episodeLen);
+
+            int32_t cur_world_offset = 0;
+            for (int32_t i = 0; i < (int32_t)consts::episodeLen; i++) {
+                for (CountT j = 0; j < (CountT)cfg.numWorlds; j++) {
+                    resets_staging[i].reset = 0;
+                }
+
+                for (int32_t j = 0; j < worlds_per_step; j++) {
+                    if (cur_world_offset >= (int32_t)cfg.numWorlds) {
+                        break;
+                    }
+
+                    resets_staging[cur_world_offset].reset = 1;
+                    cur_world_offset += 1;
+                }
+
+                uploadResets();
+                gpuExec.runAsync(strm);
+                if (cur_world_offset >= (int32_t)cfg.numWorlds) {
+                    break;
+                }
+            }
+        }
+
         copyOutObservations(strm, buffers, mgr);
     }
 
@@ -540,6 +574,7 @@ Manager::Impl * Manager::Impl::init(
     Sim::Config sim_cfg;
     sim_cfg.autoReset = mgr_cfg.autoReset;
     sim_cfg.initRandKey = rand::initKey(mgr_cfg.randSeed);
+    sim_cfg.flags = mgr_cfg.simFlags;
 
     madrona::math::Vector3 teamColors[] = {
         Vector3{ 1.f, 0.f, 0.f },
@@ -712,6 +747,30 @@ void Manager::init()
     }
 
     step();
+
+    if ((impl_->cfg.simFlags & SimFlags::StaggerStarts) ==
+            SimFlags::StaggerStarts) {
+        int32_t num_worlds = (int32_t)impl_->cfg.numWorlds;
+        int32_t worlds_per_step = madrona::utils::divideRoundUp(
+            num_worlds, (int32_t)consts::episodeLen);
+
+        int32_t cur_world_offset = 0;
+        for (int32_t i = 0; i < (int32_t)consts::episodeLen; i++) {
+            for (int32_t j = 0; j < worlds_per_step; j++) {
+                if (cur_world_offset >= num_worlds) {
+                    break;
+                }
+
+                triggerReset(cur_world_offset);
+                cur_world_offset += 1;
+            }
+
+            step();
+            if (cur_world_offset >= num_worlds) {
+                break;
+            }
+        }
+    }
 }
 
 void Manager::step()
@@ -772,7 +831,7 @@ TrainInterface Manager::trainInterface() const
             .rewards = rewardTensor().interface(),
             .dones = doneTensor().interface(),
             .pbt = {
-                { "match_result", matchResultTensor().interface() },
+                { "match_results", matchResultTensor().interface() },
             },
         },
     };

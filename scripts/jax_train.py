@@ -10,6 +10,7 @@ from time import time
 import os
 
 import madrona_rocket_league
+from madrona_rocket_league import SimFlags
 
 import madrona_learn
 from madrona_learn import (
@@ -57,6 +58,7 @@ sim = madrona_rocket_league.SimManager(
     auto_reset = True,
     num_pbt_policies = args.pbt_ensemble_size + args.pbt_past_policies,
     rand_seed = 5,
+    sim_flags = SimFlags.StaggerStarts,
 )
 
 jax_gpu = jax.devices()[0].platform == 'gpu'
@@ -86,6 +88,7 @@ def host_cb(update_id, metrics, train_state_mgr):
     vnorm_mu = train_state_mgr.train_states.value_normalizer_state['mu'][0][0]
     vnorm_sigma = train_state_mgr.train_states.value_normalizer_state['sigma'][0][0]
     print(f"    Value Normalizer => Mean: {vnorm_mu: .3e}, σ: {vnorm_sigma: .3e}")
+    print(train_state_mgr.policy_states.fitness_score)
 
     print()
 
@@ -115,7 +118,7 @@ if args.pbt_ensemble_size != 0:
         team_size = 3,
         num_train_policies = args.pbt_ensemble_size,
         num_past_policies = args.pbt_past_policies,
-        past_policy_update_interval = 20,
+        past_policy_update_interval = 10,
         self_play_portion = 0.50,
         cross_play_portion = 0.25,
         past_play_portion = 0.25,
@@ -158,15 +161,14 @@ cfg = TrainConfig(
     seed = 5,
 )
 
-policy, obs_preprocess = make_policy(dtype)
+policy = make_policy(dtype)
 
 if args.restore:
     restore_ckpt = os.path.join(args.ckpt_dir, str(args.restore))
 else:
     restore_ckpt = None
 
-madrona_learn.train(dev, cfg, sim_init, sim_step,
-    policy, obs_preprocess, iter_cb,
+madrona_learn.train(dev, cfg, sim_init, sim_step, policy, iter_cb,
     CustomMetricConfig(add_metrics = lambda metrics: metrics),
     restore_ckpt = restore_ckpt, profile_port = args.profile_port)
 

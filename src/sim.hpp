@@ -53,6 +53,7 @@ struct Sim : public madrona::WorldBase {
     struct Config {
         bool autoReset;
         RandKey initRandKey;
+        SimFlags flags;
         madrona::phys::ObjectManager *rigidBodyObjMgr;
         RewardHyperParams *rewardHyperParams;
         const madrona::render::RenderECSBridge *renderBridge;

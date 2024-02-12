@@ -49,6 +49,7 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerSingleton<MatchInfo>();
     registry.registerSingleton<MatchResult>();
     registry.registerSingleton<TeamRewardState>();
+    registry.registerSingleton<SimFlags>();
 
     registry.registerArchetype<PhysicsEntity>();
     registry.registerArchetype<Car>();
@@ -85,14 +86,13 @@ static inline void initWorld(Engine &ctx)
         ctx.data().curWorldEpisode++, (uint32_t)ctx.worldID().idx));
 
     ctx.singleton<MatchInfo>().stepsRemaining = consts::episodeLen;
-
     // Defined in src/level_gen.hpp / src/level_gen.cpp
     generateWorld(ctx);
 }
 
 inline void matchInfoSystem(Engine &, MatchInfo &match_info)
 {
-    //match_info.stepsRemaining -= 1;
+    match_info.stepsRemaining -= 1;
 }
 
 // This system runs each frame and checks if the current episode is complete
@@ -540,8 +540,33 @@ inline void collectCarObservationSystem(
 inline void updateResultsSystem(Engine &ctx,
                                 MatchResult &match_result)
 {
-    (void)ctx;
-    (void)match_result;
+    const MatchInfo &match_info = ctx.singleton<MatchInfo>();
+
+    if (match_info.stepsRemaining == consts::episodeLen - 1) {
+        match_result.numTeamAGoals = 0;
+        match_result.numTeamBGoals = 0;
+    }
+
+    Entity ball_entity = ctx.data().ball;
+    BallGoalState &ball_gs = ctx.get<BallGoalState>(ball_entity);
+
+    if (ball_gs.state == BallGoalState::State::InGoal) {
+        if (ball_gs.data == 0) {
+            match_result.numTeamAGoals += 1;
+        } else {
+            match_result.numTeamBGoals += 1;
+        }
+    }
+
+    if (match_info.stepsRemaining == 0) {
+        if (match_result.numTeamAGoals > match_result.numTeamBGoals) {
+            match_result.winResult = 0;
+        } else if (match_result.numTeamBGoals > match_result.numTeamAGoals) {
+            match_result.winResult = 1;
+        } else {
+            match_result.winResult = 2;
+        }
+    }
 }
 
 inline void individualRewardSystem(
@@ -668,7 +693,6 @@ inline void finalRewardSystem(Engine &ctx,
                               const CarPolicy &car_policy,
                               Reward &reward)
 {
-    return;
     float my_reward = reward.v;
 
     TeamRewardState &team_rewards = ctx.singleton<TeamRewardState>();
@@ -690,13 +714,12 @@ inline void finalRewardSystem(Engine &ctx,
 inline void writeDonesSystem(Engine &ctx,
                              Done &done)
 {
-    int32_t steps_remaining = ctx.singleton<MatchInfo>().stepsRemaining == 0;
+    int32_t steps_remaining = ctx.singleton<MatchInfo>().stepsRemaining;
     if (steps_remaining == 0 || ctx.singleton<WorldReset>().reset == 1) {
         done.v = 1;
     } else if (steps_remaining == consts::episodeLen - 1) {
         done.v = 0;
     }
-    done.v = 0;
 }
 
 // Helper function for sorting nodes in the taskgraph.
@@ -851,6 +874,8 @@ Sim::Sim(Engine &ctx,
     constexpr CountT max_total_entities = consts::numAgents +
         consts::numRooms * (consts::maxEntitiesPerRoom + 3) +
         4; // side walls + floor
+
+    ctx.singleton<SimFlags>() = cfg.flags;
 
     phys::RigidBodyPhysicsSystem::init(ctx, cfg.rigidBodyObjMgr,
         consts::deltaT, consts::numPhysicsSubsteps, -9.8f * math::up,

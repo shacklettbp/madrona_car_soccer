@@ -9,6 +9,7 @@ import argparse
 from functools import partial
 
 import madrona_rocket_league
+from madrona_rocket_league import SimFlags
 
 import madrona_learn
 
@@ -43,6 +44,7 @@ sim = madrona_rocket_league.SimManager(
     num_pbt_policies = 0,
     auto_reset = True,
     rand_seed = 5,
+    sim_flags = SimFlags.Default,
 )
 
 team_size = 3
@@ -109,7 +111,7 @@ elif args.bf16:
 else:
     dtype = jnp.float32
 
-policy, obs_preprocess = make_policy(dtype)
+policy = make_policy(dtype)
 
 single_policy_eval = None
 multi_policy_eval = None
@@ -123,16 +125,17 @@ elif args.crossplay:
         team_size = team_size,
     )
 
-madrona_learn.eval_ckpt(dev, madrona_learn.EvalConfig(
-        ckpt_path = args.ckpt_path,
-        num_worlds = args.num_worlds,
-        num_agents_per_world = team_size * num_teams,
-        num_eval_steps = args.num_steps,
-        policy_dtype = dtype,
-        single_policy_eval = single_policy_eval,
-        multi_policy_eval = multi_policy_eval,
-    ),
-    sim_init, sim_step, policy, obs_preprocess, iter_cb,
+cfg = madrona_learn.EvalConfig(
+    ckpt_path = args.ckpt_path,
+    num_worlds = args.num_worlds,
+    num_agents_per_world = team_size * num_teams,
+    num_eval_steps = args.num_steps,
+    policy_dtype = dtype,
+    single_policy_eval = single_policy_eval,
+    multi_policy_eval = multi_policy_eval,
 )
+
+madrona_learn.eval_ckpt(
+    dev, cfg, sim_init, sim_step, policy, iter_cb)
 
 del sim
