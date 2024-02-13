@@ -21,6 +21,7 @@ enum class ExportID : uint32_t {
     Done,
     BallObservation,
     SelfObservation,
+    GoalsObservation,
     TeamObservation,
     EnemyObservation,
     StepsRemaining,

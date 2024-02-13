@@ -227,7 +227,9 @@ struct Manager::CUDAImpl final : Manager::Impl {
     }
 
 #ifdef MADRONA_CUDA_SUPPORT
-    inline void ** copyOutObservations(cudaStream_t strm, void **buffers, Manager &mgr)
+    inline void ** copyOutObservations(cudaStream_t strm,
+                                       void **buffers,
+                                       Manager &mgr)
     {
         auto copyFromSim = [&strm](void *dst, const Tensor &src) {
             uint64_t num_bytes = numTensorBytes(src);
@@ -238,6 +240,7 @@ struct Manager::CUDAImpl final : Manager::Impl {
 
         // Observations
         copyFromSim(*buffers++, mgr.selfObservationTensor());
+        copyFromSim(*buffers++, mgr.goalsObservationTensor());
         copyFromSim(*buffers++, mgr.teamObservationTensor());
         copyFromSim(*buffers++, mgr.enemyObservationTensor());
         copyFromSim(*buffers++, mgr.ballTensor());
@@ -823,6 +826,7 @@ TrainInterface Manager::trainInterface() const
         {
             .observations = {
                 { "self", selfObservationTensor().interface() },
+                { "goals", goalsObservationTensor().interface() },
                 { "team", teamObservationTensor().interface() },
                 { "enemy", enemyObservationTensor().interface() },
                 { "ball", ballTensor().interface() },
@@ -891,6 +895,17 @@ Tensor Manager::selfObservationTensor() const
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
                                    sizeof(SelfObservation) / sizeof(float),
+                               });
+}
+
+Tensor Manager::goalsObservationTensor() const
+{
+    return impl_->exportTensor(ExportID::GoalsObservation,
+                               TensorElementType::Float32,
+                               {
+                                   impl_->cfg.numWorlds * consts::numAgents,
+                                   2,
+                                   sizeof(GoalObservation) / sizeof(float),
                                });
 }
 

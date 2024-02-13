@@ -29,6 +29,7 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<Progress>();
     registry.registerComponent<OtherAgents>();
     registry.registerComponent<SelfObservation>();
+    registry.registerComponent<GoalsObservation>();
     registry.registerComponent<TeamObservation>();
     registry.registerComponent<EnemyObservation>();
     registry.registerComponent<BallObservation>();
@@ -58,11 +59,17 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
 
     registry.exportSingleton<WorldReset>((uint32_t)ExportID::Reset);
     registry.exportSingleton<MatchResult>((uint32_t)ExportID::MatchResult);
-    registry.exportColumn<Car, BallObservation>((uint32_t)ExportID::BallObservation);
+    registry.exportColumn<Car, BallObservation>(
+        (uint32_t)ExportID::BallObservation);
     registry.exportColumn<Car, Action>((uint32_t)ExportID::Action);
-    registry.exportColumn<Car, SelfObservation>((uint32_t)ExportID::SelfObservation);
-    registry.exportColumn<Car, TeamObservation>((uint32_t)ExportID::TeamObservation);
-    registry.exportColumn<Car, EnemyObservation>((uint32_t)ExportID::EnemyObservation);
+    registry.exportColumn<Car, SelfObservation>(
+        (uint32_t)ExportID::SelfObservation);
+    registry.exportColumn<Car, GoalsObservation>(
+        (uint32_t)ExportID::GoalsObservation);
+    registry.exportColumn<Car, TeamObservation>(
+        (uint32_t)ExportID::TeamObservation);
+    registry.exportColumn<Car, EnemyObservation>(
+        (uint32_t)ExportID::EnemyObservation);
     registry.exportColumn<Car, StepsRemainingObservation>(
         (uint32_t)ExportID::StepsRemaining);
     registry.exportColumn<Car, Reward>((uint32_t)ExportID::Reward);
@@ -471,6 +478,7 @@ inline void collectCarObservationSystem(
     Rotation rot,
     Velocity vel,
     SelfObservation &self_obs,
+    GoalsObservation &goals_obs,
     TeamObservation &team_obs,
     EnemyObservation &enemy_obs,
     BallObservation &ball_obs,
@@ -485,6 +493,18 @@ inline void collectCarObservationSystem(
     self_obs.vel = xyzToPolar(vel.linear);
 
     Quat to_view = rot.inv();
+
+    for (CountT i = 0; i < 2; i++) {
+        GoalObservation &goal_ob = goals_obs.obs[i];
+        Goal &goal = engine.data().arena.goals[i];
+
+        bool is_my_goal = team_state.teamIdx == i;
+
+        Vector3 to_goal = goal.centerPosition - pos;
+
+        goal_ob.pos = xyzToPolar(to_view.rotateVec(to_goal));
+        goal_ob.isOpponentGoal = is_my_goal ? 0.f : 1.f;
+    }
 
     // Handle team observations next
     Team &my_team = engine.data().teams[team_state.teamIdx];
@@ -836,6 +856,7 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             Rotation,
             Velocity,
             SelfObservation,
+            GoalsObservation,
             TeamObservation,
             EnemyObservation,
             BallObservation,

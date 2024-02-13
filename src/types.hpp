@@ -24,6 +24,7 @@ using madrona::phys::Velocity;
 using madrona::phys::ResponseType;
 using madrona::phys::ExternalForce;
 using madrona::phys::ExternalTorque;
+using madrona::math::Vector3;
 
 // WorldReset is a per-world singleton component that causes the current
 // episode to be terminated and the world regenerated
@@ -95,6 +96,16 @@ struct SelfObservation {
     float theta;
 
     PolarObservation vel;
+
+};
+
+struct GoalObservation {
+    PolarObservation pos;
+    float isOpponentGoal;
+};
+
+struct GoalsObservation {
+    GoalObservation obs[2];
 };
 
 static_assert(sizeof(SelfObservation) == sizeof(float) * 7);
@@ -204,8 +215,7 @@ struct Goal {
     // Left, back, right walls
     Entity outerBorders[2];
     
-    madrona::math::Vector3 minBound;
-    madrona::math::Vector3 maxBound;
+    Vector3 centerPosition;
 };
 
 struct Arena {
@@ -289,6 +299,7 @@ struct Car : public madrona::Archetype<
 
     // Observations
     SelfObservation,
+    GoalsObservation,
     TeamObservation,
     EnemyObservation,
     BallObservation,

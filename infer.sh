@@ -10,7 +10,7 @@ MADRONA_MWGPU_KERNEL_CACHE=${ROOT_DIR}/build/cache python ${ROOT_DIR}/scripts/ja
     --gpu-sim \
     --ckpt-path ${ROOT_DIR}/ckpts/$1 \
     --num-steps 1000 \
-    --single-policy 14 \
+    --single-policy 2 \
     --num-worlds 1 \
     --bf16 \
     --print-action-probs \

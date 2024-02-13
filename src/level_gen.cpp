@@ -71,15 +71,17 @@ static Goal makeGoal(Engine &ctx,
 
     Goal goal;
 
+    Vector3 back_wall_right = {
+        2.f * consts::worldWidth / 6.f,
+        sign * (consts::wallWidth / 2.f + consts::worldLength / 2.f),
+        0,
+    };
+
     goal.outerBorders[0] = ctx.makeRenderableEntity<PhysicsEntity>();
     setupRigidBodyEntity(
         ctx,
         goal.outerBorders[0],
-        Vector3 {
-            2.f * consts::worldWidth / 6.f,
-            sign * (consts::wallWidth / 2.f + consts::worldLength / 2.f),
-            0,
-        },
+        back_wall_right,
         Quat { 1, 0, 0, 0 },
         SimObject::Wall,
         EntityType::Wall,
@@ -90,15 +92,17 @@ static Goal makeGoal(Engine &ctx,
             consts::wallHeight
         });
 
+    Vector3 back_wall_left = {
+        -2.f * consts::worldWidth / 6.f,
+        sign * (consts::wallWidth / 2.f + consts::worldLength / 2.f),
+        0,
+    };
+
     goal.outerBorders[1] = ctx.makeRenderableEntity<PhysicsEntity>();
     setupRigidBodyEntity(
         ctx,
         goal.outerBorders[1],
-        Vector3 {
-            -2.f * consts::worldWidth / 6.f,
-            sign * (consts::wallWidth / 2.f + consts::worldLength / 2.f),
-            0,
-        },
+        back_wall_left,
         Quat { 1, 0, 0, 0 },
         SimObject::Wall,
         EntityType::Wall,
@@ -108,6 +112,9 @@ static Goal makeGoal(Engine &ctx,
             consts::wallWidth,
             consts::wallHeight
         });
+
+    Vector3 goal_center = (back_wall_left + back_wall_right) / 2.f;
+    goal.centerPosition = goal_center + consts::agentDimensions.z;
 
     return goal;
 }

@@ -140,6 +140,7 @@ int main(int argc, char *argv[])
     };
 
     auto self_tensor = mgr.selfObservationTensor();
+    auto goals_tensor = mgr.goalsObservationTensor();
     auto team_tensor = mgr.teamObservationTensor();
     auto enemy_tensor = mgr.enemyObservationTensor();
     auto ball_tensor = mgr.ballTensor();
@@ -180,6 +181,10 @@ int main(int argc, char *argv[])
 #ifdef MADRONA_CUDA_SUPPORT
     SelfObservation *self_obs_readback = (SelfObservation *)cu::allocReadback(
         sizeof(SelfObservation) * num_views);
+
+    GoalsObservation *goals_obs_readback = 
+        (GoalsObservation *)cu::allocReadback(
+            sizeof(GoalsObservation) * num_views);
 
     Reward *reward_readback = (Reward *)cu::allocReadback(
         sizeof(Reward) * num_views);
@@ -244,18 +249,28 @@ int main(int argc, char *argv[])
         SelfObservation *self_obs_ptr =
             (SelfObservation *)self_tensor.devicePtr();
 
+        GoalsObservation *goals_obs_ptr =
+            (GoalsObservation *)goals_tensor.devicePtr();
+
         Reward *reward_ptr = (Reward *)reward_tensor.devicePtr();
 
         BallObservation *ball_obs_ptr =
             (BallObservation *)ball_tensor.devicePtr();
 
         self_obs_ptr += agent_world_offset;
+        goals_obs_ptr += agent_world_offset;
+        reward_ptr += agent_world_offset;
+
         ball_obs_ptr += cur_world_id;
 
         if (exec_mode == ExecMode::CUDA) {
 #ifdef MADRONA_CUDA_SUPPORT
             cudaMemcpyAsync(self_obs_readback, self_obs_ptr,
                             sizeof(SelfObservation) * num_views,
+                            cudaMemcpyDeviceToHost, readback_strm);
+
+            cudaMemcpyAsync(goals_obs_readback, goals_obs_ptr,
+                            sizeof(GoalsObservation) * num_views,
                             cudaMemcpyDeviceToHost, readback_strm);
 
             cudaMemcpyAsync(reward_readback, reward_ptr,
@@ -269,6 +284,7 @@ int main(int argc, char *argv[])
             REQ_CUDA(cudaStreamSynchronize(readback_strm));
 
             self_obs_ptr = self_obs_readback;
+            goals_obs_ptr = goals_obs_readback;
             reward_ptr = reward_readback;
             ball_obs_ptr = ball_readback;
 #endif
@@ -279,17 +295,28 @@ int main(int argc, char *argv[])
             ImGui::Begin(player_str.c_str());
 
             const SelfObservation &cur_self = self_obs_ptr[i];
+            const GoalsObservation &cur_goals = goals_obs_ptr[i];
             const Reward &reward = reward_ptr[i];
             const BallObservation &ball = ball_obs_ptr[i];
 
-            ImGui::Text("Position: (%.1f, %.1f, %.1f)",
+            ImGui::Text("Position:      (%.1f, %.1f, %.1f)",
                 cur_self.x, cur_self.y, cur_self.z);
-            ImGui::Text("Rotation:  %.2f",
+            ImGui::Text("Rotation:      %.2f",
                 cur_self.theta);
-            ImGui::Text("Velocity: (%.1f, %.1f, %.1f)",
+            ImGui::Text("Velocity:      (%.1f, %.1f, %.1f)",
                 cur_self.vel.r, cur_self.vel.theta, cur_self.vel.phi);
-            ImGui::Text("To Ball:  (%.1f, %.1f, %.1f)",
+            ImGui::Text("To Ball:       (%.1f, %.1f, %.1f)",
                 ball.pos.r, ball.pos.theta, ball.pos.phi);
+
+            for (CountT i = 0; i < 2; i++) {
+                const GoalObservation &cur_goal = cur_goals.obs[i];
+
+                ImGui::Text(cur_goal.isOpponentGoal ?
+                        "To Enemy Goal: (%.1f, %.1f, %.1f)" :
+                        "To My Goal:    (%.1f, %.1f, %.1f)",
+                    cur_goal.pos.r, cur_goal.pos.theta, cur_goal.pos.phi);
+            }
+
             ImGui::Text("Reward:    %.3f",
                 reward.v);
 
