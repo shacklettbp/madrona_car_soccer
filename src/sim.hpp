@@ -104,6 +104,7 @@ struct Sim : public madrona::WorldBase {
     // Contains the walls for the arena
     Arena arena;
 
+    Entity cars[consts::numCarsPerTeam * consts::numTeams];
     Team teams[2];
 
     // There is a single ball in the world

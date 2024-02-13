@@ -19,6 +19,7 @@ NB_MODULE(madrona_rocket_league, m) {
     nb::enum_<SimFlags>(m, "SimFlags", nb::is_arithmetic())
         .value("Default", SimFlags::Default)
         .value("StaggerStarts", SimFlags::StaggerStarts)
+        .value("RandomFlipTeams", SimFlags::RandomFlipTeams)
     ;
 
     nb::class_<Manager> (m, "SimManager")

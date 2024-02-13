@@ -58,7 +58,7 @@ sim = madrona_rocket_league.SimManager(
     auto_reset = True,
     num_pbt_policies = args.pbt_ensemble_size + args.pbt_past_policies,
     rand_seed = 5,
-    sim_flags = SimFlags.StaggerStarts,
+    sim_flags = SimFlags.StaggerStarts | SimFlags.RandomFlipTeams,
 )
 
 jax_gpu = jax.devices()[0].platform == 'gpu'
