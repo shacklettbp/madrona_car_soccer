@@ -20,6 +20,6 @@ rm -rf ${ROOT_DIR}/ckpts/$1 && MADRONA_MWGPU_KERNEL_CACHE=${ROOT_DIR}/build/cach
     --entropy-loss-coef 0.001 \
     --value-loss-coef 0.5 \
     --num-channels 512 \
-    --pbt-ensemble-size 4 \
+    --pbt-ensemble-size 16 \
     --pbt-past-policies 32 \
     --bf16
