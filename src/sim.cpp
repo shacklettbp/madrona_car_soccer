@@ -604,7 +604,7 @@ inline void individualRewardSystem(
     BallGoalState &ball_gs = engine.get<BallGoalState>(ball_entity);
 
     if (touch_state.touched == 1) {
-        reward += 0.1f;
+        //reward += 0.1f;
     }
 
     // 2) Goal scored
