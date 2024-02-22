@@ -89,6 +89,7 @@ def host_cb(update_id, metrics, train_state_mgr):
     vnorm_sigma = train_state_mgr.train_states.value_normalizer_state['sigma'][0][0]
     print(f"    Value Normalizer => Mean: {vnorm_mu: .3e}, σ: {vnorm_sigma: .3e}")
     print(train_state_mgr.policy_states.fitness_score)
+    print(train_state_mgr.policy_states.fitness_score.mean())
 
     print()
 
@@ -118,15 +119,12 @@ if args.pbt_ensemble_size != 0:
         team_size = 3,
         num_train_policies = args.pbt_ensemble_size,
         num_past_policies = args.pbt_past_policies,
-        policy_cull_interval = 20,
-        num_cull_policies = 4,
+        train_policy_cull_interval = 20,
+        num_cull_policies = 1,
         past_policy_update_interval = 5,
         self_play_portion = 0.125,
         cross_play_portion = 0.5,
         past_play_portion = 0.375,
-        #self_play_portion = 0.8,
-        #cross_play_portion = 0.05,
-        #past_play_portion = 0.15,
     )
 else:
     pbt_cfg = None

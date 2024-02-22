@@ -9,7 +9,7 @@ fi
 MADRONA_MWGPU_KERNEL_CACHE=${ROOT_DIR}/build/cache python ${ROOT_DIR}/scripts/jax_infer.py \
     --gpu-sim \
     --ckpt-path ${ROOT_DIR}/ckpts/$1 \
-    --num-steps 10000 \
+    --num-steps 1000 \
     --crossplay \
     --num-worlds 256 \
     --bf16 \

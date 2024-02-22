@@ -231,15 +231,20 @@ def make_policy(dtype):
             a_max = 1,
         )
 
-    def parse_match_result(match_result):
-        return match_result[..., 0]
+    def get_team_a_score(match_result):
+        winner_id = match_result[..., 0]
+        is_a_winner = winner_id == 0
+        is_b_winner = winner_id == 1
+
+        return jnp.where(
+            is_a_winner, 1, jnp.where(is_b_winner, 0, 0.5))
 
     return Policy(
         actor_critic = actor_critic,
         obs_preprocess = obs_preprocess,
         init_reward_hyper_params = init_reward_hyper_params,
         mutate_reward_hyper_params = mutate_reward_hyper_params,
-        parse_match_result = parse_match_result,
+        get_team_a_score = get_team_a_score,
     )
 
     return policy

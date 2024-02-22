@@ -462,7 +462,10 @@ static inline PolarObservation xyzToPolar(Vector3 v)
 
     // Note that this is angle off y-forward
     float theta = -atan2f(v.x, v.y);
-    float phi = asinf (v.z);
+
+    // This clamp is necessary on GPU due to sqrt / division
+    // approximation
+    float phi = asinf(std::clamp(v.z, -1.f, 1.f));
 
     return PolarObservation {
         .r = distObs(r),

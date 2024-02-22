@@ -200,6 +200,7 @@ struct Manager::CPUImpl final : Manager::Impl {
 struct Manager::CUDAImpl final : Manager::Impl {
     MWCudaExecutor gpuExec;
     RewardHyperParams *rewardHyperParams;
+    RandKey staggerShuffleRND;
 
     inline CUDAImpl(const Manager::Config &mgr_cfg,
                    PhysicsLoader &&phys_loader,
@@ -208,12 +209,14 @@ struct Manager::CUDAImpl final : Manager::Impl {
                    RewardHyperParams *reward_hyper_params,
                    Optional<RenderGPUState> &&render_gpu_state,
                    Optional<render::RenderManager> &&render_mgr,
-                   MWCudaExecutor &&gpu_exec)
+                   MWCudaExecutor &&gpu_exec,
+                   RandKey stagger_shuffle_key)
         : Impl(mgr_cfg, std::move(phys_loader),
                reset_buffer, action_buffer,
                std::move(render_gpu_state), std::move(render_mgr)),
           gpuExec(std::move(gpu_exec)),
-          rewardHyperParams(reward_hyper_params)
+          rewardHyperParams(reward_hyper_params),
+          staggerShuffleRND(stagger_shuffle_key)
     {}
 
     inline virtual ~CUDAImpl() final
@@ -251,51 +254,83 @@ struct Manager::CUDAImpl final : Manager::Impl {
 
     virtual void gpuStreamInit(cudaStream_t strm, void **buffers, Manager &mgr)
     {
+        printf("Simulator stream init\n");
+
         HeapArray<WorldReset> resets_staging(cfg.numWorlds);
         for (CountT i = 0; i < (CountT)cfg.numWorlds; i++) {
             resets_staging[i].reset = 1;
         }
 
-        auto uploadResets = [&]()
+        auto resetSyncStep = [&]()
         {
             cudaMemcpyAsync(worldResetBuffer, resets_staging.data(),
                        sizeof(WorldReset) * cfg.numWorlds,
                        cudaMemcpyHostToDevice, strm);
+            gpuExec.runAsync(strm);
+            REQ_CUDA(cudaStreamSynchronize(strm));
         };
 
-        uploadResets();
-        gpuExec.runAsync(strm);
-
+        resetSyncStep();
 
         if ((cfg.simFlags & SimFlags::StaggerStarts) ==
                 SimFlags::StaggerStarts) {
-            int32_t worlds_per_step = madrona::utils::divideRoundUp(
-                (int32_t)cfg.numWorlds, (int32_t)consts::episodeLen);
+            HeapArray<int32_t> steps_before_reset(cfg.numWorlds);
 
-            int32_t cur_world_offset = 0;
-            for (int32_t i = 0; i < (int32_t)consts::episodeLen; i++) {
-                for (CountT j = 0; j < (CountT)cfg.numWorlds; j++) {
-                    resets_staging[i].reset = 0;
-                }
+            CountT cur_world_idx = 0;
+            CountT step_idx;
+            for (step_idx = 0;
+                    step_idx < (CountT)consts::episodeLen;
+                    step_idx++) {
+                CountT worlds_remaining = 
+                    (CountT)cfg.numWorlds - cur_world_idx;
+                CountT episode_steps_remaining = consts::episodeLen - step_idx;
 
-                for (int32_t j = 0; j < worlds_per_step; j++) {
-                    if (cur_world_offset >= (int32_t)cfg.numWorlds) {
+                CountT worlds_per_step = madrona::utils::divideRoundUp(
+                    worlds_remaining, episode_steps_remaining);
+
+                bool finished = false;
+                for (CountT i = 0; i < worlds_per_step; i++) {
+                    if (cur_world_idx >= (CountT)cfg.numWorlds) {
+                        finished = true;
                         break;
                     }
 
-                    resets_staging[cur_world_offset].reset = 1;
-                    cur_world_offset += 1;
+                    steps_before_reset[cur_world_idx++] = step_idx;
                 }
 
-                uploadResets();
-                gpuExec.runAsync(strm);
-                if (cur_world_offset >= (int32_t)cfg.numWorlds) {
+                if (finished || worlds_per_step == 0) {
                     break;
                 }
+            }
+
+            assert(cur_world_idx == (CountT)cfg.numWorlds);
+
+            for (int32_t i = 0; i < (int32_t)cfg.numWorlds - 1; i++) {
+                int32_t j = rand::sampleI32(
+                    rand::split_i(staggerShuffleRND, i), i, cfg.numWorlds);
+
+                std::swap(steps_before_reset[i], steps_before_reset[j]);
+            }
+
+            
+            CountT max_steps = step_idx;
+            for (CountT step = 0; step < max_steps; step++) {
+                for (CountT world_idx = 0; world_idx < (CountT)cfg.numWorlds;
+                     world_idx++) {
+                    if (steps_before_reset[world_idx] == step) {
+                        resets_staging[world_idx].reset = 1;
+                    } else {
+                        resets_staging[world_idx].reset = 0;
+                    }
+                }
+
+                resetSyncStep();
             }
         }
 
         copyOutObservations(strm, buffers, mgr);
+
+        printf("Simulator stream init finished\n");
     }
 
     virtual void gpuStreamStep(cudaStream_t strm, void **buffers, Manager &mgr)
@@ -574,9 +609,13 @@ static void loadPhysicsObjects(PhysicsLoader &loader)
 Manager::Impl * Manager::Impl::init(
     const Manager::Config &mgr_cfg)
 {
+    RandKey init_key = rand::initKey(mgr_cfg.randSeed);
+    RandKey sim_init_key = rand::split_i(init_key, 0);
+    RandKey stagger_shuffle_key = rand::split_i(init_key, 1);
+
     Sim::Config sim_cfg;
     sim_cfg.autoReset = mgr_cfg.autoReset;
-    sim_cfg.initRandKey = rand::initKey(mgr_cfg.randSeed);
+    sim_cfg.initRandKey = sim_init_key;
     sim_cfg.flags = mgr_cfg.simFlags;
 
     madrona::math::Vector3 teamColors[] = {
@@ -656,12 +695,15 @@ Manager::Impl * Manager::Impl::init(
             std::move(render_gpu_state),
             std::move(render_mgr),
             std::move(gpu_exec),
+            stagger_shuffle_key,
         };
 #else
         FATAL("Madrona was not compiled with CUDA support");
 #endif
     } break;
     case ExecMode::CPU: {
+        (void)stagger_shuffle_key;
+
         PhysicsLoader phys_loader(ExecMode::CPU, 10);
         // loadPhysicsObjects(phys_loader);
 
@@ -753,26 +795,7 @@ void Manager::init()
 
     if ((impl_->cfg.simFlags & SimFlags::StaggerStarts) ==
             SimFlags::StaggerStarts) {
-        int32_t num_worlds = (int32_t)impl_->cfg.numWorlds;
-        int32_t worlds_per_step = madrona::utils::divideRoundUp(
-            num_worlds, (int32_t)consts::episodeLen);
-
-        int32_t cur_world_offset = 0;
-        for (int32_t i = 0; i < (int32_t)consts::episodeLen; i++) {
-            for (int32_t j = 0; j < worlds_per_step; j++) {
-                if (cur_world_offset >= num_worlds) {
-                    break;
-                }
-
-                triggerReset(cur_world_offset);
-                cur_world_offset += 1;
-            }
-
-            step();
-            if (cur_world_offset >= num_worlds) {
-                break;
-            }
-        }
+        assert(false);
     }
 }
 
