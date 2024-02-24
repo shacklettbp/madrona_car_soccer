@@ -18,6 +18,7 @@ from madrona_learn import (
 )
 
 from jax_policy import make_policy
+from common import print_elos
 
 madrona_learn.init(0.6)
 
@@ -89,8 +90,7 @@ def host_cb(update_id, metrics, train_state_mgr):
     vnorm_sigma = train_state_mgr.train_states.value_normalizer_state['sigma'][0][0]
     print(f"    Value Normalizer => Mean: {vnorm_mu: .3e}, σ: {vnorm_sigma: .3e}")
     elos = train_state_mgr.policy_states.fitness_score[..., 0]
-    print(elos[:args.pbt_ensemble_size])
-    print(elos[args.pbt_ensemble_size:])
+    print_elos(elos)
 
     print()
 

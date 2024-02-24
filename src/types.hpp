@@ -335,6 +335,7 @@ struct Collision : public madrona::Archetype<
 
 struct Team {
     Entity players[consts::numCarsPerTeam];
+    int32_t goalIdx;
 };
 
 }

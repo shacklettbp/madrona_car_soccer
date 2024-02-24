@@ -574,7 +574,7 @@ inline void updateResultsSystem(Engine &ctx,
     BallGoalState &ball_gs = ctx.get<BallGoalState>(ball_entity);
 
     if (ball_gs.state == BallGoalState::State::InGoal) {
-        if (ball_gs.data == 0) {
+        if (ball_gs.data == ctx.data().teams[0].goalIdx) {
             match_result.numTeamAGoals += 1;
         } else {
             match_result.numTeamBGoals += 1;

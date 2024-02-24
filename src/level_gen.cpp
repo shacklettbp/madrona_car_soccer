@@ -315,11 +315,17 @@ static void resetPersistentEntities(Engine &ctx)
     team_offsets[0] = 0;
     team_offsets[1] = consts::numCarsPerTeam;
 
+    ctx.data().teams[0].goalIdx = 0;
+    ctx.data().teams[1].goalIdx = 1;
+
     if ((ctx.singleton<SimFlags>() & SimFlags::RandomFlipTeams) ==
             SimFlags::RandomFlipTeams) {
         if (ctx.data().rng.sampleUniform() < 0.5) {
             team_offsets[0] = consts::numCarsPerTeam;
             team_offsets[1] = 0;
+
+            ctx.data().teams[0].goalIdx = 1;
+            ctx.data().teams[1].goalIdx = 0;
         }
     }
 

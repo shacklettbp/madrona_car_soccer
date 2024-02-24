@@ -14,6 +14,7 @@ from madrona_rocket_league import SimFlags
 import madrona_learn
 
 from jax_policy import make_policy
+from common import print_elos
 
 madrona_learn.init(0.6)
 
@@ -90,7 +91,7 @@ def host_cb(obs, actions, action_probs, values, dones, rewards):
     if args.print_obs:
         print(obs)
 
-    print(f"\nStep {step_idx}")
+    #print(f"\nStep {step_idx}")
 
     if args.print_action_probs:
         for i in range(actions.shape[0]):
@@ -131,7 +132,13 @@ cfg = madrona_learn.EvalConfig(
     policy_dtype = dtype,
 )
 
-madrona_learn.eval_policies(
+elos = policy_states.fitness_score[..., 0]
+print_elos(elos)
+
+fitness_scores = madrona_learn.eval_policies(
     dev, cfg, sim_init, sim_step, policy, policy_states, iter_cb)
+
+elos = fitness_scores[..., 0]
+print_elos(elos)
 
 del sim
