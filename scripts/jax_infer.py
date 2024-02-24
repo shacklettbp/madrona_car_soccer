@@ -59,6 +59,8 @@ elif args.crossplay:
         policy, args.ckpt_path,
         train_only=False if args.crossplay_include_past else True)
 
+print(policy_states.reward_hyper_params)
+
 sim = madrona_rocket_league.SimManager(
     exec_mode = madrona_rocket_league.madrona.ExecMode.CUDA if args.gpu_sim else madrona_rocket_league.madrona.ExecMode.CPU,
     gpu_id = args.gpu_id,
