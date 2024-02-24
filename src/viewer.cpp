@@ -308,8 +308,8 @@ int main(int argc, char *argv[])
             ImGui::Text("To Ball:       (%.1f, %.1f, %.1f)",
                 ball.pos.r, ball.pos.theta, ball.pos.phi);
 
-            for (CountT i = 0; i < 2; i++) {
-                const GoalObservation &cur_goal = cur_goals.obs[i];
+            for (CountT j = 0; j < 2; j++) {
+                const GoalObservation &cur_goal = cur_goals.obs[j];
 
                 ImGui::Text(cur_goal.isOpponentGoal ?
                         "To Enemy Goal: (%.1f, %.1f, %.1f)" :

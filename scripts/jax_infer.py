@@ -23,6 +23,7 @@ arg_parser.add_argument('--num-steps', type=int, default=200)
 
 arg_parser.add_argument('--ckpt-path', type=str, required=True)
 arg_parser.add_argument('--crossplay', action='store_true')
+arg_parser.add_argument('--crossplay-include-past', action='store_true')
 arg_parser.add_argument('--single-policy', type=int, default=None)
 arg_parser.add_argument('--action-dump-path', type=str)
 
@@ -37,11 +38,31 @@ arg_parser.add_argument('--gpu-id', type=int, default=0)
 
 args = arg_parser.parse_args()
 
+dev = jax.devices()[0]
+
+if args.fp16:
+    dtype = jnp.float16
+elif args.bf16:
+    dtype = jnp.bfloat16
+else:
+    dtype = jnp.float32
+
+policy = make_policy(dtype)
+
+if args.single_policy != None:
+    assert not args.crossplay
+    policy_states, num_policies = madrona_learn.eval_load_ckpt(
+        policy, args.ckpt_path, single_policy = args.single_policy)
+elif args.crossplay:
+    policy_states, num_policies = madrona_learn.eval_load_ckpt(
+        policy, args.ckpt_path,
+        train_only=False if args.crossplay_include_past else True)
+
 sim = madrona_rocket_league.SimManager(
     exec_mode = madrona_rocket_league.madrona.ExecMode.CUDA if args.gpu_sim else madrona_rocket_league.madrona.ExecMode.CPU,
     gpu_id = args.gpu_id,
     num_worlds = args.num_worlds,
-    num_pbt_policies = 0,
+    num_pbt_policies = num_policies,
     auto_reset = True,
     rand_seed = 5,
     sim_flags = SimFlags.Default,
@@ -102,40 +123,15 @@ def iter_cb(step_data):
        step_data['dones'],
        step_data['rewards'])
 
-dev = jax.devices()[0]
-
-if args.fp16:
-    dtype = jnp.float16
-elif args.bf16:
-    dtype = jnp.bfloat16
-else:
-    dtype = jnp.float32
-
-policy = make_policy(dtype)
-
-single_policy_eval = None
-multi_policy_eval = None
-
-if args.single_policy != None:
-    assert not args.crossplay
-    single_policy_eval = args.single_policy
-elif args.crossplay:
-    multi_policy_eval = madrona_learn.MultiPolicyEvalConfig(
-        num_teams = num_teams,
-        team_size = team_size,
-    )
-
 cfg = madrona_learn.EvalConfig(
-    ckpt_path = args.ckpt_path,
     num_worlds = args.num_worlds,
-    num_agents_per_world = team_size * num_teams,
+    team_size = team_size,
+    num_teams = num_teams,
     num_eval_steps = args.num_steps,
     policy_dtype = dtype,
-    single_policy_eval = single_policy_eval,
-    multi_policy_eval = multi_policy_eval,
 )
 
-madrona_learn.eval_ckpt(
-    dev, cfg, sim_init, sim_step, policy, iter_cb)
+madrona_learn.eval_policies(
+    dev, cfg, sim_init, sim_step, policy, policy_states, iter_cb)
 
 del sim
