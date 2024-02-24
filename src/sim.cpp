@@ -593,7 +593,7 @@ inline void updateResultsSystem(Engine &ctx,
 }
 
 inline void individualRewardSystem(
-    Engine &engine,
+    Engine &ctx,
     Entity e,
     CarPolicy car_policy,
     Position pos,
@@ -604,8 +604,8 @@ inline void individualRewardSystem(
 {
     float reward = 0.f;
 
-    Entity ball_entity = engine.data().ball;
-    BallGoalState &ball_gs = engine.get<BallGoalState>(ball_entity);
+    Entity ball_entity = ctx.data().ball;
+    BallGoalState &ball_gs = ctx.get<BallGoalState>(ball_entity);
 
     const RewardHyperParams &reward_hyper_params = ctx.data().rewardHyperParams[
         car_policy.policyIdx];
