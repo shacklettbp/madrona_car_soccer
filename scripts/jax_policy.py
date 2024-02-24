@@ -221,14 +221,29 @@ def make_policy(dtype):
     )
 
     def init_reward_hyper_params(rnd):
-        return random.uniform(rnd, (1,), dtype=jnp.float32, minval=0, maxval=1)
+        spirit_rnd, hit_rnd = random.split(rnd, 2)
+
+        return jnp.stack(
+            random.uniform(spirit_rnd, (), dtype=jnp.float32,
+                           minval=0, maxval=1),
+            random.uniform(spirit_rnd, (), dtype=jnp.float32,
+                           minval=0.01, maxval=0.1),
+        )
+
 
     def mutate_reward_hyper_params(rnd, cur):
-        return jnp.clip(
-            a = cur + random.uniform(rnd, (1,), dtype=jnp.float32,
-                                     minval=-0.1, maxval=0.1),
-            a_min = 0,
-            a_max = 1,
+        spirit = cur[..., 0]
+        hit = cur[..., 1]
+
+        return jnp.stack(
+            jnp.clip(
+                a = spirit + random.uniform(rnd, (), dtype=jnp.float32,
+                                         minval=-0.1, maxval=0.1),
+                a_min = 0,
+                a_max = 1,
+            ),
+            hit + random.uniform(rnd, (), dtype=jnp.float32,
+                                 minval=-0.05, maxval=0.05),
         )
 
     def get_team_a_score(match_result):

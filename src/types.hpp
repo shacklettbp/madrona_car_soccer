@@ -78,7 +78,8 @@ struct PolarObservation {
 };
 
 struct RewardHyperParams {
-    float teamSpirit;
+    float teamSpirit = 1.f;
+    float hitRewardScale = 0.1f;
 };
 
 struct CarPolicy {

@@ -595,6 +595,7 @@ inline void updateResultsSystem(Engine &ctx,
 inline void individualRewardSystem(
     Engine &engine,
     Entity e,
+    CarPolicy car_policy,
     Position pos,
     Rotation rot,
     TeamState team_state,
@@ -606,8 +607,11 @@ inline void individualRewardSystem(
     Entity ball_entity = engine.data().ball;
     BallGoalState &ball_gs = engine.get<BallGoalState>(ball_entity);
 
+    const RewardHyperParams &reward_hyper_params = ctx.data().rewardHyperParams[
+        car_policy.policyIdx];
+
     if (touch_state.touched == 1) {
-        //reward += 0.1f;
+        reward += 1.f * reward_hyper_params.hitRewardScale;
     }
 
     // 2) Goal scored
@@ -821,6 +825,7 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
     auto individual_reward_sys = builder.addToGraph<ParallelForNode<Engine,
         individualRewardSystem,
             Entity,
+            CarPolicy,
             Position,
             Rotation,
             TeamState,
