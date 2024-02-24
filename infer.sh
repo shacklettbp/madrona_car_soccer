@@ -6,12 +6,16 @@ if [ -z $1 ]; then
     exit
 fi
 
+if [ -z $2 ]; then
+    exit
+fi
+
 MADRONA_MWGPU_KERNEL_CACHE=${ROOT_DIR}/build/cache python ${ROOT_DIR}/scripts/jax_infer.py \
     --gpu-sim \
-    --ckpt-path ${ROOT_DIR}/ckpts/$1 \
+    --ckpt-path ${ROOT_DIR}/ckpts/$2 \
     --num-steps 1000 \
     --crossplay \
-    --num-worlds 256 \
+    --num-worlds $1 \
     --bf16 \
     --print-action-probs \
     --action-dump-path ${ROOT_DIR}/build/actions
