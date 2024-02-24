@@ -237,6 +237,7 @@ void placeEntities(Engine &ctx)
 {
     for (CountT team_idx = 0; team_idx < 2; ++team_idx) {
         Team &team = ctx.data().teams[team_idx];
+        int32_t goal_idx = team.goalIdx;
 
         for (CountT car_idx = 0; car_idx < consts::numCarsPerTeam; ++car_idx) {
             Entity car_entity = team.players[car_idx];
@@ -245,7 +246,7 @@ void placeEntities(Engine &ctx)
             Vector3 pos { 0.f, 0.f, consts::agentDimensions.z };
             Quat rot{};
 
-            if (team_idx % 2 == 0) {
+            if (goal_idx == 0) {
                 pos.x = 0.0f;
                 pos.y = consts::worldLength / 2.5f;
 
@@ -311,19 +312,12 @@ static void resetPersistentEntities(Engine &ctx)
         registerRigidBodyEntity(ctx, arena.goals[i].outerBorders[1], SimObject::Wall);
     }
 
-    CountT team_offsets[consts::numTeams];
-    team_offsets[0] = 0;
-    team_offsets[1] = consts::numCarsPerTeam;
-
     ctx.data().teams[0].goalIdx = 0;
     ctx.data().teams[1].goalIdx = 1;
 
     if ((ctx.singleton<SimFlags>() & SimFlags::RandomFlipTeams) ==
             SimFlags::RandomFlipTeams) {
         if (ctx.data().rng.sampleUniform() < 0.5) {
-            team_offsets[0] = consts::numCarsPerTeam;
-            team_offsets[1] = 0;
-
             ctx.data().teams[0].goalIdx = 1;
             ctx.data().teams[1].goalIdx = 0;
         }
@@ -331,10 +325,9 @@ static void resetPersistentEntities(Engine &ctx)
 
     for (CountT team_idx = 0; team_idx < 2; ++team_idx) {
         Team &team = ctx.data().teams[team_idx];
-
         for (CountT car_idx = 0; car_idx < consts::numCarsPerTeam; ++car_idx) {
             Entity car_entity =
-                ctx.data().cars[team_offsets[team_idx] + car_idx];
+                ctx.data().cars[consts::numCarsPerTeam * team_idx + car_idx];
 
             team.players[car_idx] = car_entity;
             ctx.get<TeamState>(car_entity).teamIdx = (int32_t)team_idx;

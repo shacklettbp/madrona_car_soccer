@@ -89,6 +89,8 @@ def host_cb(update_id, metrics, train_state_mgr):
     vnorm_mu = train_state_mgr.train_states.value_normalizer_state['mu'][0][0]
     vnorm_sigma = train_state_mgr.train_states.value_normalizer_state['sigma'][0][0]
     print(f"    Value Normalizer => Mean: {vnorm_mu: .3e}, σ: {vnorm_sigma: .3e}")
+    print(train_state_mgr.train_states.hyper_params)
+
     elos = train_state_mgr.policy_states.fitness_score[..., 0]
     print_elos(elos)
 

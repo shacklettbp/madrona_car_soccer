@@ -616,10 +616,23 @@ inline void individualRewardSystem(
 
     // 2) Goal scored
     if (ball_gs.state == BallGoalState::State::InGoal) {
-        if (ball_gs.data == team_state.teamIdx) {
+        if (ball_gs.data == ctx.data().teams[team_state.teamIdx].goalIdx) {
             reward += 5.f;
         } else {
             reward -= 5.f;
+        }
+    }
+
+    const MatchInfo &match_info = ctx.singleton<MatchInfo>();
+    if (match_info.stepsRemaining == 0) {
+        int32_t win_result = ctx.singleton<MatchResult>().winResult;
+
+        if (win_result == 2) {
+            reward -= 5.f;
+        } else if (win_result == team_state.teamIdx) {
+            reward += 10.f;
+        } else {
+            reward -= 10.f;
         }
     }
 

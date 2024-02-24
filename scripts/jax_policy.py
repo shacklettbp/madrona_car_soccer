@@ -237,13 +237,13 @@ def make_policy(dtype):
 
         return jnp.stack((
             jnp.clip(
-                a = spirit + random.uniform(rnd, (), dtype=jnp.float32,
-                                         minval=-0.1, maxval=0.1),
+                a = spirit * random.uniform(rnd, (), dtype=jnp.float32,
+                                            minval=0.8, maxval=1.2),
                 a_min = 0,
                 a_max = 1,
             ),
-            hit + random.uniform(rnd, (), dtype=jnp.float32,
-                                 minval=-0.05, maxval=0.05),
+            hit * random.uniform(rnd, (), dtype=jnp.float32,
+                                 minval=0.8, maxval=1.2),
         ))
 
     def get_team_a_score(match_result):
