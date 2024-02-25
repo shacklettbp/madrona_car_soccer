@@ -14,7 +14,7 @@ from madrona_rocket_league import SimFlags
 
 import madrona_learn
 from madrona_learn import (
-    TrainConfig, CustomMetricConfig, PPOConfig, PBTConfig,
+    TrainConfig, CustomMetricConfig, PPOConfig, PBTConfig, ParamRange,
 )
 
 from jax_policy import make_policy
@@ -89,7 +89,8 @@ def host_cb(update_id, metrics, train_state_mgr):
     vnorm_mu = train_state_mgr.train_states.value_normalizer_state['mu'][0][0]
     vnorm_sigma = train_state_mgr.train_states.value_normalizer_state['sigma'][0][0]
     print(f"    Value Normalizer => Mean: {vnorm_mu: .3e}, σ: {vnorm_sigma: .3e}")
-    print(train_state_mgr.train_states.hyper_params)
+    print(train_state_mgr.train_states.hyper_params.lr)
+    print(train_state_mgr.train_states.hyper_params.entropy_coef)
 
     elos = train_state_mgr.policy_states.fitness_score[..., 0]
     print_elos(elos)
@@ -128,6 +129,16 @@ if args.pbt_ensemble_size != 0:
         self_play_portion = 0.125,
         cross_play_portion = 0.5,
         past_play_portion = 0.375,
+        lr_explore_range = ParamRange(
+            min = 0.1,
+            max = 10.0,
+            log10_space = True,
+        ),
+        entropy_explore_range = ParamRange(
+            min = 0.1,
+            max = 10.0,
+            log10_space = True,
+        )
     )
 else:
     pbt_cfg = None
