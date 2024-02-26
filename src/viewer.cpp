@@ -17,25 +17,38 @@
 
 using namespace madrona;
 using namespace madrona::viz;
+using namespace madEscape;
 
-static HeapArray<int32_t> readReplayLog(const char *path)
+static void badRecording()
 {
-    std::ifstream replay_log(path, std::ios::binary);
-    replay_log.seekg(0, std::ios::end);
-    int64_t size = replay_log.tellg();
-    replay_log.seekg(0, std::ios::beg);
+    FATAL("Invalid recording");
+}
 
-    HeapArray<int32_t> log(size / sizeof(int32_t));
+static HeapArray<Checkpoint> readReplayLog(const char *path)
+{
+    std::ifstream replay_log_file(path, std::ios::binary);
+    if (!replay_log_file.is_open()) {
+        badRecording();
+    }
 
-    replay_log.read((char *)log.data(), (size / sizeof(int32_t)) * sizeof(int32_t));
+    replay_log_file.seekg(0, std::ios::end);
+    size_t num_bytes = replay_log_file.tellg();
+    replay_log_file.seekg(0, std::ios::beg);
 
-    return log;
+    size_t num_steps = num_bytes / sizeof(Checkpoint);
+    if (num_steps * sizeof(Checkpoint) != num_bytes) {
+        badRecording();
+    }
+
+    HeapArray<Checkpoint> log_data(num_steps);
+
+    replay_log_file.read((char *)log_data.data(), num_bytes);
+
+    return log_data;
 }
 
 int main(int argc, char *argv[])
 {
-    using namespace madEscape;
-
     constexpr int64_t num_views = consts::numTeams * consts::numCarsPerTeam;
 
     // Read command line arguments
@@ -59,12 +72,15 @@ int main(int argc, char *argv[])
         replay_log_path = argv[3];
     }
 
-    auto replay_log = Optional<HeapArray<int32_t>>::none();
-    uint32_t cur_replay_step = 0;
-    uint32_t num_replay_steps = 0;
+    auto replay_log = Optional<HeapArray<Checkpoint>>::none();
+    CountT cur_replay_step = 0;
+    CountT num_replay_steps = 0;
     if (replay_log_path != nullptr) {
         replay_log = readReplayLog(replay_log_path);
-        num_replay_steps = replay_log->size() / (num_worlds * num_views * 2);
+        num_replay_steps = replay_log->size() / num_worlds;
+        if (num_replay_steps * num_worlds != replay_log->size()) {
+            badRecording();
+        }
     }
 
     bool enable_batch_renderer =
@@ -111,34 +127,6 @@ int main(int argc, char *argv[])
         .cameraRotation = initial_camera_rotation,
     });
 
-    // Replay step
-    auto replayStep = [&]() {
-        if (cur_replay_step == num_replay_steps - 1) {
-            return true;
-        }
-
-        printf("Step: %u\n", cur_replay_step);
-
-        for (uint32_t i = 0; i < num_worlds; i++) {
-            for (uint32_t j = 0; j < num_views; j++) {
-                uint32_t base_idx = 0;
-                base_idx = 2 * (cur_replay_step * num_views * num_worlds +
-                    i * num_views + j);
-
-                int32_t move_amount = (*replay_log)[base_idx];
-                int32_t turn = (*replay_log)[base_idx + 1];
-
-                printf("%d, %d: %d %d\n",
-                       i, j, move_amount, turn);
-                mgr.setAction(i, j, move_amount, turn);
-            }
-        }
-
-        cur_replay_step++;
-
-        return false;
-    };
-
     auto self_tensor = mgr.selfObservationTensor();
     auto goals_tensor = mgr.goalsObservationTensor();
     auto team_tensor = mgr.teamObservationTensor();
@@ -157,6 +145,53 @@ int main(int argc, char *argv[])
     auto reward_printer = reward_tensor.makePrinter();
     auto match_result_printer = match_result_tensor.makePrinter();
 
+    auto ckpt_tensor = mgr.checkpointTensor();
+    auto load_ckpt_tensor = mgr.loadCheckpointTensor();
+
+    HeapArray<LoadCheckpoint> load_all_checkpoints(num_worlds);
+    for (CountT i = 0; i < (CountT)num_worlds; i++) {
+        load_all_checkpoints[i].load = 1;
+    }
+
+    cudaStream_t copy_strm;
+    REQ_CUDA(cudaStreamCreate(&copy_strm));
+
+    // Replay step
+    auto replayStep = [&]() {
+        if (cur_replay_step == num_replay_steps) {
+            return true;
+        }
+
+        printf("Step: %ld\n", (long)cur_replay_step);
+
+        const Checkpoint *cur_step_ckpts = replay_log->data() +
+            cur_replay_step * (CountT)num_worlds;
+
+        if (exec_mode == ExecMode::CUDA) {
+#ifdef MADRONA_CUDA_SUPPORT
+            cudaMemcpyAsync(ckpt_tensor.devicePtr(), cur_step_ckpts,
+                sizeof(Checkpoint) * num_worlds,
+                cudaMemcpyHostToDevice, copy_strm);
+
+            cudaMemcpyAsync(load_ckpt_tensor.devicePtr(),
+                            load_all_checkpoints.data(),
+                            sizeof(LoadCheckpoint) * num_worlds,
+                            cudaMemcpyHostToDevice, copy_strm);
+
+            REQ_CUDA(cudaStreamSynchronize(copy_strm));
+#endif
+        } else {
+            memcpy(ckpt_tensor.devicePtr(), cur_step_ckpts,
+                   sizeof(Checkpoint) * num_worlds);
+
+            memcpy(load_ckpt_tensor.devicePtr(), load_all_checkpoints.data(),
+                   sizeof(LoadCheckpoint) * num_worlds);
+        }
+
+        cur_replay_step++;
+
+        return false;
+    };
 
     auto printObs = [&]() {
         printf("Self\n");
@@ -197,9 +232,6 @@ int main(int argc, char *argv[])
 
     BallObservation *ball_readback = (BallObservation *)cu::allocReadback(
         sizeof(BallObservation));
-
-    cudaStream_t readback_strm;
-    REQ_CUDA(cudaStreamCreate(&readback_strm));
 #endif
 
     // Main loop for the viewer viewer
@@ -273,21 +305,21 @@ int main(int argc, char *argv[])
 #ifdef MADRONA_CUDA_SUPPORT
             cudaMemcpyAsync(self_obs_readback, self_obs_ptr,
                             sizeof(SelfObservation) * num_views,
-                            cudaMemcpyDeviceToHost, readback_strm);
+                            cudaMemcpyDeviceToHost, copy_strm);
 
             cudaMemcpyAsync(goals_obs_readback, goals_obs_ptr,
                             sizeof(GoalsObservation) * num_views,
-                            cudaMemcpyDeviceToHost, readback_strm);
+                            cudaMemcpyDeviceToHost, copy_strm);
 
             cudaMemcpyAsync(reward_readback, reward_ptr,
                             sizeof(Reward) * num_views,
-                            cudaMemcpyDeviceToHost, readback_strm);
+                            cudaMemcpyDeviceToHost, copy_strm);
 
             cudaMemcpyAsync(ball_readback, ball_obs_ptr,
                             sizeof(BallObservation),
-                            cudaMemcpyDeviceToHost, readback_strm);
+                            cudaMemcpyDeviceToHost, copy_strm);
 
-            REQ_CUDA(cudaStreamSynchronize(readback_strm));
+            REQ_CUDA(cudaStreamSynchronize(copy_strm));
 
             self_obs_ptr = self_obs_readback;
             goals_obs_ptr = goals_obs_readback;

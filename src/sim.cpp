@@ -33,9 +33,7 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<TeamObservation>();
     registry.registerComponent<EnemyObservation>();
     registry.registerComponent<BallObservation>();
-    registry.registerComponent<ButtonState>();
-    registry.registerComponent<OpenState>();
-    registry.registerComponent<DoorProperties>();
+
     registry.registerComponent<Lidar>();
     registry.registerComponent<StepsRemainingObservation>();
     registry.registerComponent<EntityType>();
@@ -52,6 +50,9 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerSingleton<TeamRewardState>();
     registry.registerSingleton<SimFlags>();
 
+    registry.registerSingleton<LoadCheckpoint>();
+    registry.registerSingleton<Checkpoint>();
+
     registry.registerArchetype<PhysicsEntity>();
     registry.registerArchetype<Car>();
     registry.registerArchetype<Ball>();
@@ -59,6 +60,12 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
 
     registry.exportSingleton<WorldReset>((uint32_t)ExportID::Reset);
     registry.exportSingleton<MatchResult>((uint32_t)ExportID::MatchResult);
+
+    registry.exportSingleton<LoadCheckpoint>(
+        (uint32_t)ExportID::LoadCheckpoint);
+    registry.exportSingleton<Checkpoint>(
+        (uint32_t)ExportID::Checkpoint);
+
     registry.exportColumn<Car, BallObservation>(
         (uint32_t)ExportID::BallObservation);
     registry.exportColumn<Car, Action>((uint32_t)ExportID::Action);
@@ -763,6 +770,87 @@ inline void writeDonesSystem(Engine &ctx,
     }
 }
 
+inline void loadCheckpointSystem(Engine &ctx, const Checkpoint &ckpt)
+{
+    LoadCheckpoint should_load = ctx.singleton<LoadCheckpoint>();
+    if (!should_load.load) {
+        return;
+    }
+
+    should_load.load = 0;
+
+    for (CountT i = 0; i < 2; i++) {
+        Team &team = ctx.data().teams[i];
+        const Checkpoint::TeamData &team_ckpt = ckpt.teams[i];
+
+        for (CountT j = 0; j < 3; j++) {
+            const Checkpoint::CarData &car_ckpt = team_ckpt.cars[j];
+
+            Entity car = team.players[j];
+            ctx.get<Position>(car) = car_ckpt.position;
+            ctx.get<Rotation>(car) = car_ckpt.rotation;
+            ctx.get<Velocity>(car) = car_ckpt.velocity;
+        }
+
+        team.goalIdx = team_ckpt.goalIdx;
+    }
+
+    {
+        const Checkpoint::BallData &ball_ckpt = ckpt.ball;
+
+        Entity ball = ctx.data().ball;
+        ctx.get<Position>(ball) = ball_ckpt.position;
+        ctx.get<Rotation>(ball) = ball_ckpt.rotation;
+        ctx.get<Velocity>(ball) = ball_ckpt.velocity;
+    }
+
+    {
+        MatchInfo &match_info = ctx.singleton<MatchInfo>();
+        MatchResult &match_result = ctx.singleton<MatchResult>();
+
+        match_info.stepsRemaining = ckpt.stepsRemaining;
+        match_result.numTeamAGoals = ckpt.numTeamAGoals;
+        match_result.numTeamBGoals = ckpt.numTeamBGoals;
+    }
+}
+
+inline void checkpointSystem(Engine &ctx, Checkpoint &ckpt)
+{
+    for (CountT i = 0; i < 2; i++) {
+        const Team &team = ctx.data().teams[i];
+        Checkpoint::TeamData &team_ckpt = ckpt.teams[i];
+
+        for (CountT j = 0; j < 3; j++) {
+            Entity car = team.players[j];
+
+            Checkpoint::CarData &car_ckpt = team_ckpt.cars[j];
+            car_ckpt.position = ctx.get<Position>(car);
+            car_ckpt.rotation = ctx.get<Rotation>(car);
+            car_ckpt.velocity = ctx.get<Velocity>(car);
+        }
+
+        team_ckpt.goalIdx = team.goalIdx;
+    }
+
+    {
+        Entity ball = ctx.data().ball;
+
+        Checkpoint::BallData &ball_ckpt = ckpt.ball;
+        ball_ckpt.position = ctx.get<Position>(ball);
+        ball_ckpt.rotation = ctx.get<Rotation>(ball);
+        ball_ckpt.velocity = ctx.get<Velocity>(ball);
+    }
+
+    {
+        const MatchInfo &match_info = ctx.singleton<MatchInfo>();
+        const MatchResult &match_result = ctx.singleton<MatchResult>();
+
+        ckpt.stepsRemaining = match_info.stepsRemaining;
+        ckpt.numTeamAGoals = match_result.numTeamAGoals;
+        ckpt.numTeamBGoals = match_result.numTeamBGoals;
+    }
+}
+
 // Helper function for sorting nodes in the taskgraph.
 // Sorting is only supported / required on the GPU backend,
 // since the CPU backend currently keeps separate tables for each world.
@@ -871,6 +959,17 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             WorldReset
         >>({done_sys});
 
+    auto load_ckpt_sys = builder.addToGraph<ParallelForNode<Engine,
+        loadCheckpointSystem,
+            Checkpoint
+        >>({reset_sys});
+
+    auto ckpt_sys = builder.addToGraph<ParallelForNode<Engine,
+        checkpointSystem,
+            Checkpoint
+        >>({load_ckpt_sys});
+    (void)ckpt_sys;
+
     auto car_obs_system = builder.addToGraph<ParallelForNode<Engine,
          collectCarObservationSystem,
             Entity,
@@ -884,7 +983,7 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             BallObservation,
             StepsRemainingObservation,
             TeamState
-        >>({velocity_correct_system});
+        >>({load_ckpt_sys});
 
     if (cfg.renderBridge) {
         RenderingSystem::setupTasks(builder, {reset_sys});
@@ -919,6 +1018,8 @@ Sim::Sim(Engine &ctx,
         4; // side walls + floor
 
     ctx.singleton<SimFlags>() = cfg.flags;
+
+    ctx.singleton<LoadCheckpoint>().load = 0;
 
     phys::RigidBodyPhysicsSystem::init(ctx, cfg.rigidBodyObjMgr,
         consts::deltaT, consts::numPhysicsSubsteps, -9.8f * math::up,

@@ -58,6 +58,10 @@ public:
     madrona::py::Tensor stepsRemainingTensor() const;
     madrona::py::Tensor policyAssignmentsTensor() const;
     madrona::py::Tensor rewardHyperParamsTensor() const;
+
+    madrona::py::Tensor loadCheckpointTensor() const;
+    madrona::py::Tensor checkpointTensor() const;
+
     madrona::py::Tensor rgbTensor() const;
     madrona::py::Tensor depthTensor() const;
     madrona::py::TrainInterface trainInterface() const;

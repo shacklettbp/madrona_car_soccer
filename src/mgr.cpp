@@ -985,6 +985,26 @@ Tensor Manager::policyAssignmentsTensor() const
                                });
 }
 
+Tensor Manager::loadCheckpointTensor() const
+{
+    return impl_->exportTensor(ExportID::LoadCheckpoint,
+                               TensorElementType::Int32,
+                               {
+                                   impl_->cfg.numWorlds,
+                                   1,
+                               });
+}
+
+Tensor Manager::checkpointTensor() const
+{
+    return impl_->exportTensor(ExportID::Checkpoint,
+                               TensorElementType::UInt8,
+                               {
+                                   impl_->cfg.numWorlds,
+                                   sizeof(Checkpoint),
+                               });
+}
+
 Tensor Manager::rewardHyperParamsTensor() const
 {
     return impl_->rewardHyperParamsTensor();

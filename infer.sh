@@ -17,6 +17,6 @@ MADRONA_MWGPU_KERNEL_CACHE=${ROOT_DIR}/build/cache python ${ROOT_DIR}/scripts/ja
     --crossplay \
     --num-worlds $1 \
     --bf16 \
-    --action-dump-path ${ROOT_DIR}/build/actions
+    --record-log ${ROOT_DIR}/build/record
     #--print-action-probs \
     #--crossplay-include-past \

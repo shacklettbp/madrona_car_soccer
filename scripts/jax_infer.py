@@ -26,7 +26,7 @@ arg_parser.add_argument('--ckpt-path', type=str, required=True)
 arg_parser.add_argument('--crossplay', action='store_true')
 arg_parser.add_argument('--crossplay-include-past', action='store_true')
 arg_parser.add_argument('--single-policy', type=int, default=None)
-arg_parser.add_argument('--action-dump-path', type=str)
+arg_parser.add_argument('--record-log', type=str)
 
 arg_parser.add_argument('--print-obs', action='store_true')
 arg_parser.add_argument('--print-action-probs', action='store_true')
@@ -71,6 +71,8 @@ sim = madrona_rocket_league.SimManager(
     sim_flags = SimFlags.Default,
 )
 
+ckpt_tensor = sim.ckpt_tensor()
+
 team_size = 3
 num_teams = 2
 
@@ -80,10 +82,10 @@ jax_gpu = jax.devices()[0].platform == 'gpu'
 
 sim_init, sim_step = sim.jax(jax_gpu)
 
-if args.action_dump_path:
-    action_log = open(args.action_dump_path, 'wb')
+if args.record_log:
+    record_log_file = open(args.record_log, 'wb')
 else:
-    action_log = None
+    record_log_file = None
 
 step_idx = 0
 
@@ -109,8 +111,7 @@ def host_cb(obs, actions, action_probs, values, dones, rewards):
     if args.print_rewards:
         print("Rewards:", rewards)
 
-    if action_log:
-        actions.tofile(action_log)
+    np.array(ckpt_tensor.to_jax()).tofile(record_log_file)
 
     step_idx += 1
 

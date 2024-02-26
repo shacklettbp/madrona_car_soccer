@@ -25,6 +25,7 @@ using madrona::phys::ResponseType;
 using madrona::phys::ExternalForce;
 using madrona::phys::ExternalTorque;
 using madrona::math::Vector3;
+using madrona::math::Quat;
 
 // WorldReset is a per-world singleton component that causes the current
 // episode to be terminated and the world regenerated
@@ -193,24 +194,6 @@ enum class DynamicEntityType : uint32_t {
     NumTypes,
 };
 
-// A per-door component that tracks whether or not the door should be open.
-struct OpenState {
-    bool isOpen;
-};
-
-// Linked buttons that control the door opening and whether or not the door
-// should remain open after the buttons are pressed once.
-struct DoorProperties {
-    Entity buttons[consts::maxEntitiesPerRoom];
-    int32_t numButtons;
-    bool isPersistent;
-};
-
-// Similar to OpenState, true during frames where a button is pressed
-struct ButtonState {
-    bool isPressed;
-};
-
 // Encapsulates goal cage
 struct Goal {
     // Left, back, right walls
@@ -269,6 +252,35 @@ enum class GoalState {
     InGoal,
     NotInGoal,
     NumStates,
+};
+
+struct LoadCheckpoint {
+    int32_t load;
+};
+
+struct Checkpoint {
+    struct CarData {
+        Vector3 position;
+        Quat rotation;
+        Velocity velocity;
+    };
+
+    struct TeamData {
+        CarData cars[consts::numCarsPerTeam];
+        uint32_t goalIdx;
+    };
+
+    struct BallData {
+        Vector3 position;
+        Quat rotation;
+        Velocity velocity;
+    };
+
+    TeamData teams[2];
+    BallData ball;
+    int32_t stepsRemaining;
+    int32_t numTeamAGoals;
+    int32_t numTeamBGoals;
 };
 
 struct Ball : public madrona::Archetype<

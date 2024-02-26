@@ -60,6 +60,8 @@ NB_MODULE(madrona_rocket_league, m) {
         .def("enemy_observation_tensor",
              &Manager::enemyObservationTensor)
         .def("steps_remaining_tensor", &Manager::stepsRemainingTensor)
+        .def("load_ckpt_tensor", &Manager::loadCheckpointTensor)
+        .def("ckpt_tensor", &Manager::checkpointTensor)
         .def("rgb_tensor", &Manager::rgbTensor)
         .def("depth_tensor", &Manager::depthTensor)
         .def("jax", JAXInterface::buildEntry<

@@ -26,6 +26,8 @@ enum class ExportID : uint32_t {
     EnemyObservation,
     StepsRemaining,
     CarPolicy,
+    LoadCheckpoint,
+    Checkpoint,
     NumExports,
 };
 
