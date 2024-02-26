@@ -214,9 +214,9 @@ try:
     madrona_learn.train(dev, cfg, sim_init, sim_step, policy, iter_cb,
         CustomMetricConfig(add_metrics = lambda metrics: metrics),
         restore_ckpt = restore_ckpt, profile_port = args.profile_port)
-except e:
+except:
     tb_writer.flush()
-    raise e
+    raise
 
 tb_writer.flush()
 del sim
