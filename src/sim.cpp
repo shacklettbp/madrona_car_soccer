@@ -475,7 +475,7 @@ static inline PolarObservation xyzToPolar(Vector3 v)
 }
 
 inline void collectCarObservationSystem(
-    Engine &engine,
+    Engine &ctx,
     Entity e,
     Position pos,
     Rotation rot,
@@ -497,11 +497,13 @@ inline void collectCarObservationSystem(
 
     Quat to_view = rot.inv();
 
+    const Team &my_team = ctx.data().teams[team_state.teamIdx];
+
     for (CountT i = 0; i < 2; i++) {
         GoalObservation &goal_ob = goals_obs.obs[i];
-        Goal &goal = engine.data().arena.goals[i];
+        Goal &goal = ctx.data().arena.goals[i];
 
-        bool is_my_goal = team_state.teamIdx == i;
+        bool is_my_goal = i == my_team.goalIdx;
 
         Vector3 to_goal = goal.centerPosition - pos;
 
@@ -510,35 +512,34 @@ inline void collectCarObservationSystem(
     }
 
     // Handle team observations next
-    Team &my_team = engine.data().teams[team_state.teamIdx];
     for (int i = 0, obs_idx = 0; i < consts::numCarsPerTeam; ++i) {
         // Only car about the other players
         if (my_team.players[i] != e) {
             Entity other_player = my_team.players[i];
 
-            Vector3 other_pos = engine.get<Position>(other_player);
-            Rotation other_rot = engine.get<Rotation>(other_player);
-            Vector3 other_vel = engine.get<Velocity>(other_player).linear;
+            Vector3 other_pos = ctx.get<Position>(other_player);
+            Rotation other_rot = ctx.get<Rotation>(other_player);
+            Vector3 other_vel = ctx.get<Velocity>(other_player).linear;
 
             Vector3 to_other = other_pos - pos;
 
             OtherObservation &obs = team_obs.obs[obs_idx];
             obs.polar = xyzToPolar(to_view.rotateVec(to_other));
             obs.o_theta = angleObs(computeZAngle(other_rot));
-            obs.vel = xyzToPolar(other_vel);
+            obs.vel = xyzToPolar(to_view.rotateVec(other_vel));
 
             ++obs_idx;
         }
     }
 
     // Handle the enemy team
-    Team &other_team = engine.data().teams[team_state.teamIdx ^ 1];
+    Team &other_team = ctx.data().teams[team_state.teamIdx ^ 1];
     for (int i = 0; i < consts::numCarsPerTeam; ++i) {
         Entity other_player = other_team.players[i];
 
-        Vector3 other_pos = engine.get<Position>(other_player);
-        Rotation other_rot = engine.get<Rotation>(other_player);
-        Vector3 other_vel = engine.get<Velocity>(other_player).linear;
+        Vector3 other_pos = ctx.get<Position>(other_player);
+        Rotation other_rot = ctx.get<Rotation>(other_player);
+        Vector3 other_vel = ctx.get<Velocity>(other_player).linear;
 
         Vector3 to_other = other_pos - pos;
 
@@ -548,16 +549,16 @@ inline void collectCarObservationSystem(
         obs.vel = xyzToPolar(other_vel);
     }
 
-    Entity ball_entity = engine.data().ball;
-    Vector3 ball_pos = engine.get<Position>(ball_entity);
-    Vector3 ball_vel = engine.get<Velocity>(ball_entity).linear;
+    Entity ball_entity = ctx.data().ball;
+    Vector3 ball_pos = ctx.get<Position>(ball_entity);
+    Vector3 ball_vel = ctx.get<Velocity>(ball_entity).linear;
 
     Vector3 to_ball = ball_pos - pos;
 
     ball_obs.pos = xyzToPolar(to_view.rotateVec(to_ball));
     ball_obs.vel = xyzToPolar(ball_vel);
 
-    steps_remaining_ob.t = engine.singleton<MatchInfo>().stepsRemaining;
+    steps_remaining_ob.t = ctx.singleton<MatchInfo>().stepsRemaining;
 }
 
 inline void updateResultsSystem(Engine &ctx,
