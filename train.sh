@@ -7,10 +7,16 @@ if [ -z $1 ]; then
 fi
 
 mkdir -p ${ROOT_DIR}/ckpts
+mkdir -p ${ROOT_DIR}/tb
 
-rm -rf ${ROOT_DIR}/ckpts/$1 && MADRONA_MWGPU_KERNEL_CACHE=${ROOT_DIR}/build/cache python ${ROOT_DIR}/scripts/jax_train.py \
+rm -rf ${ROOT_DIR}/ckpts/$1
+rm -rf ${ROOT_DIR}/tb/$1
+
+MADRONA_MWGPU_KERNEL_CACHE=${ROOT_DIR}/build/cache python ${ROOT_DIR}/scripts/jax_train.py \
     --gpu-sim \
-    --ckpt-dir ${ROOT_DIR}/ckpts/$1 \
+    --ckpt-dir ${ROOT_DIR}/ckpts \
+    --tb-dir ${ROOT_DIR}/tb \
+    --run-name $1 \
     --num-updates 50000 \
     --num-worlds 4096 \
     --lr 1e-4 \

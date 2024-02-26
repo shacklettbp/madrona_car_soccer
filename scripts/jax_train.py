@@ -3,6 +3,7 @@ from jax import lax, random, numpy as jnp
 from jax.experimental import checkify
 import flax
 from flax import linen as nn
+from flax.metrics import tensorboard
 
 import argparse
 from functools import partial
@@ -25,6 +26,8 @@ madrona_learn.init(0.6)
 arg_parser = argparse.ArgumentParser()
 arg_parser.add_argument('--gpu-id', type=int, default=0)
 arg_parser.add_argument('--ckpt-dir', type=str, required=True)
+arg_parser.add_argument('--tb-dir', type=str, required=True)
+arg_parser.add_argument('--run-name', type=str, required=True)
 arg_parser.add_argument('--restore', type=int)
 
 arg_parser.add_argument('--num-worlds', type=int, required=True)
@@ -66,6 +69,8 @@ jax_gpu = jax.devices()[0].platform == 'gpu'
 
 sim_init, sim_step = sim.jax(jax_gpu)
 
+tb_writer = tensorboard.SummaryWriter(os.path.join(args.tb_dir, args.run_name))
+
 def metrics_cb(metrics, epoch, mb, train_state):
     return metrics
 
@@ -89,16 +94,38 @@ def host_cb(update_id, metrics, train_state_mgr):
     vnorm_mu = train_state_mgr.train_states.value_normalizer_state['mu'][0][0]
     vnorm_sigma = train_state_mgr.train_states.value_normalizer_state['sigma'][0][0]
     print(f"    Value Normalizer => Mean: {vnorm_mu: .3e}, σ: {vnorm_sigma: .3e}")
-    print(train_state_mgr.train_states.hyper_params.lr)
-    print(train_state_mgr.train_states.hyper_params.entropy_coef)
+
+    lrs = train_state_mgr.train_states.hyper_params.lr
+    entropy_coefs = train_state_mgr.train_states.hyper_params.entropy_coef
+    reward_hyper_params = train_state_mgr.policy_states.reward_hyper_params
+
+    print(lrs)
+    print(entropy_coefs)
+    print(reward_hyper_params[..., 0])
+    print(reward_hyper_params[..., 1])
 
     elos = train_state_mgr.policy_states.fitness_score[..., 0]
     print_elos(elos)
 
     print()
 
+    metrics.tensorboard_log(tb_writer, update_id)
+
+    for i in range(elos.shape[0]):
+        tb_writer.scalar(f"p{i}/elo", elos[i], update_id)
+        tb_writer.scalar(f"p{i}/team_spirit",
+                         reward_hyper_params[i][0], update_id)
+        tb_writer.scalar(f"p{i}/hit_reward_scale",
+                         reward_hyper_params[i][1], update_id)
+
+    num_train_policies = lrs.shape[0]
+    for i in range(lrs.shape[0]):
+        tb_writer.scalar(f"p{i}/lr", lrs[i], update_id)
+        tb_writer.scalar(f"p{i}/entropy_coef", entropy_coefs[i], update_id)
+
     if update_id % 500 == 0:
-        train_state_mgr.save(update_id, f"{args.ckpt_dir}/{update_id}")
+        train_state_mgr.save(update_id,
+            f"{args.ckpt_dir}/{args.run_name}/{update_id}")
 
     return ()
 
@@ -178,12 +205,18 @@ cfg = TrainConfig(
 policy = make_policy(dtype)
 
 if args.restore:
-    restore_ckpt = os.path.join(args.ckpt_dir, str(args.restore))
+    restore_ckpt = os.path.join(
+        args.ckpt_dir, args.run_name, str(args.restore))
 else:
     restore_ckpt = None
 
-madrona_learn.train(dev, cfg, sim_init, sim_step, policy, iter_cb,
-    CustomMetricConfig(add_metrics = lambda metrics: metrics),
-    restore_ckpt = restore_ckpt, profile_port = args.profile_port)
+try:
+    madrona_learn.train(dev, cfg, sim_init, sim_step, policy, iter_cb,
+        CustomMetricConfig(add_metrics = lambda metrics: metrics),
+        restore_ckpt = restore_ckpt, profile_port = args.profile_port)
+except e:
+    tb_writer.flush()
+    raise e
 
+tb_writer.flush()
 del sim
