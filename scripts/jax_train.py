@@ -97,7 +97,7 @@ def host_cb(update_id, metrics, train_state_mgr):
 
     print()
 
-    if update_id % 100 == 0:
+    if update_id % 500 == 0:
         train_state_mgr.save(update_id, f"{args.ckpt_dir}/{update_id}")
 
     return ()
