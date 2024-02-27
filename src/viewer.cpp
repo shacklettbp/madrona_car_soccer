@@ -153,8 +153,10 @@ int main(int argc, char *argv[])
         load_all_checkpoints[i].load = 1;
     }
 
+#ifdef MADRONA_CUDA_SUPPORT
     cudaStream_t copy_strm;
     REQ_CUDA(cudaStreamCreate(&copy_strm));
+#endif
 
     // Replay step
     auto replayStep = [&]() {
