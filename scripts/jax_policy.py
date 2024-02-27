@@ -98,7 +98,8 @@ class PrefixCommon(nn.Module):
             steps_remaining_ob,
         ], axis=-1)
         
-        obs, goals_ob = obs.pop('goals')
+        obs, my_goal_ob = obs.pop('my_goal')
+        obs, enemy_goal_ob = obs.pop('enemy_goal')
         obs, team_ob = obs.pop('team')
         obs, enemy_ob = obs.pop('enemy')
         obs, ball_ob = obs.pop('ball')
@@ -107,7 +108,8 @@ class PrefixCommon(nn.Module):
 
         return FrozenDict({
             'self': self_ob, 
-            'goals': goals_ob, 
+            'my_goal': my_goal_ob, 
+            'enemy_goal': enemy_goal_ob, 
             'ball_ob': ball_ob,
             'team': team_ob,
             'enemy': enemy_ob,
