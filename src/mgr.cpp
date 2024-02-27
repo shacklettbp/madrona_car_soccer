@@ -243,7 +243,8 @@ struct Manager::CUDAImpl final : Manager::Impl {
 
         // Observations
         copyFromSim(*buffers++, mgr.selfObservationTensor());
-        copyFromSim(*buffers++, mgr.goalsObservationTensor());
+        copyFromSim(*buffers++, mgr.myGoalObservationTensor());
+        copyFromSim(*buffers++, mgr.enemyGoalObservationTensor());
         copyFromSim(*buffers++, mgr.teamObservationTensor());
         copyFromSim(*buffers++, mgr.enemyObservationTensor());
         copyFromSim(*buffers++, mgr.ballTensor());
@@ -849,7 +850,8 @@ TrainInterface Manager::trainInterface() const
         {
             .observations = {
                 { "self", selfObservationTensor().interface() },
-                { "goals", goalsObservationTensor().interface() },
+                { "my_goal", myGoalObservationTensor().interface() },
+                { "enemy_goal", enemyGoalObservationTensor().interface() },
                 { "team", teamObservationTensor().interface() },
                 { "enemy", enemyObservationTensor().interface() },
                 { "ball", ballTensor().interface() },
@@ -921,14 +923,25 @@ Tensor Manager::selfObservationTensor() const
                                });
 }
 
-Tensor Manager::goalsObservationTensor() const
+Tensor Manager::myGoalObservationTensor() const
 {
-    return impl_->exportTensor(ExportID::GoalsObservation,
+    return impl_->exportTensor(ExportID::MyGoalObservation,
                                TensorElementType::Float32,
                                {
                                    impl_->cfg.numWorlds * consts::numAgents,
-                                   2,
-                                   sizeof(GoalObservation) / sizeof(float),
+                                   1,
+                                   sizeof(MyGoalObservation) / sizeof(float),
+                               });
+}
+
+Tensor Manager::enemyGoalObservationTensor() const
+{
+    return impl_->exportTensor(ExportID::EnemyGoalObservation,
+                               TensorElementType::Float32,
+                               {
+                                   impl_->cfg.numWorlds * consts::numAgents,
+                                   1,
+                                   sizeof(EnemyGoalObservation) / sizeof(float),
                                });
 }
 

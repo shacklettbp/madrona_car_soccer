@@ -29,7 +29,8 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<Progress>();
     registry.registerComponent<OtherAgents>();
     registry.registerComponent<SelfObservation>();
-    registry.registerComponent<GoalsObservation>();
+    registry.registerComponent<MyGoalObservation>();
+    registry.registerComponent<EnemyGoalObservation>();
     registry.registerComponent<TeamObservation>();
     registry.registerComponent<EnemyObservation>();
     registry.registerComponent<BallObservation>();
@@ -71,8 +72,10 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.exportColumn<Car, Action>((uint32_t)ExportID::Action);
     registry.exportColumn<Car, SelfObservation>(
         (uint32_t)ExportID::SelfObservation);
-    registry.exportColumn<Car, GoalsObservation>(
-        (uint32_t)ExportID::GoalsObservation);
+    registry.exportColumn<Car, MyGoalObservation>(
+        (uint32_t)ExportID::MyGoalObservation);
+    registry.exportColumn<Car, EnemyGoalObservation>(
+        (uint32_t)ExportID::EnemyGoalObservation);
     registry.exportColumn<Car, TeamObservation>(
         (uint32_t)ExportID::TeamObservation);
     registry.exportColumn<Car, EnemyObservation>(
@@ -433,13 +436,17 @@ inline void collisionResolveSystem(Engine &engine,
 }
 
 inline void velocityCorrectSystem(Engine &engine,
-                                  DynamicEntityType,
+                                  DynamicEntityType type,
                                   Velocity &vel)
 {
     (void)engine;
 
     // Friction hack
-    vel.linear *= 0.9f;
+    if (type == DynamicEntityType::Ball) {
+        vel.linear *= 0.99f;
+    } else {
+        vel.linear *= 0.9f;
+    }
 }
 
 static inline float angleObs(float v) { return v / math::pi; }
@@ -488,34 +495,56 @@ inline void collectCarObservationSystem(
     Rotation rot,
     Velocity vel,
     SelfObservation &self_obs,
-    GoalsObservation &goals_obs,
+    MyGoalObservation &my_goal_obs,
+    EnemyGoalObservation &enemy_goal_obs,
     TeamObservation &team_obs,
     EnemyObservation &enemy_obs,
     BallObservation &ball_obs,
     StepsRemainingObservation &steps_remaining_ob,
     TeamState team_state)
 {
-    // Handle self observation first
-    self_obs.x = globalPosObs(pos.x);
-    self_obs.y = globalPosObs(pos.y);
-    self_obs.z = 0.f;
-    self_obs.theta = angleObs(computeZAngle(rot));
-    self_obs.vel = xyzToPolar(vel.linear);
+    const Team &my_team = ctx.data().teams[team_state.teamIdx];
+    const Team &enemy_team = ctx.data().teams[team_state.teamIdx ^ 1];
+
+    const Goal &my_goal = ctx.data().arena.goals[my_team.goalIdx];
+    const Goal &enemy_goal = ctx.data().arena.goals[enemy_team.goalIdx];
+
+    {
+        Vector3 goal_relative_pos = pos - my_goal.centerPosition;
+        float z_rot = computeZAngle(rot);
+
+        Vector3 linear_vel = vel.linear;
+
+        // Reflect observations so they're symmetrical
+        if (my_team.goalIdx == 0) {
+            goal_relative_pos.x *= -1;
+            goal_relative_pos.y *= -1;
+
+            if (z_rot > 0) {
+                z_rot -= math::pi;
+            } else {
+                z_rot += math::pi;
+            }
+
+            linear_vel.x *= -1;
+            linear_vel.y *= -1;
+        }
+
+        self_obs.x = globalPosObs(goal_relative_pos.x);
+        self_obs.y = globalPosObs(goal_relative_pos.y);
+        self_obs.z = globalPosObs(goal_relative_pos.z);
+        self_obs.theta = angleObs(z_rot);
+        self_obs.vel = xyzToPolar(linear_vel);
+    }
 
     Quat to_view = rot.inv();
 
-    const Team &my_team = ctx.data().teams[team_state.teamIdx];
+    {
+        Vector3 to_my_goal = my_goal.centerPosition - pos;
+        my_goal_obs.pos = xyzToPolar(to_view.rotateVec(to_my_goal));
 
-    for (CountT i = 0; i < 2; i++) {
-        GoalObservation &goal_ob = goals_obs.obs[i];
-        Goal &goal = ctx.data().arena.goals[i];
-
-        bool is_my_goal = i == my_team.goalIdx;
-
-        Vector3 to_goal = goal.centerPosition - pos;
-
-        goal_ob.pos = xyzToPolar(to_view.rotateVec(to_goal));
-        goal_ob.isOpponentGoal = is_my_goal ? 0.f : 1.f;
+        Vector3 to_enemy_goal = enemy_goal.centerPosition - pos;
+        enemy_goal_obs.pos = xyzToPolar(to_view.rotateVec(to_enemy_goal));
     }
 
     // Handle team observations next
@@ -532,7 +561,8 @@ inline void collectCarObservationSystem(
 
             OtherObservation &obs = team_obs.obs[obs_idx];
             obs.polar = xyzToPolar(to_view.rotateVec(to_other));
-            obs.o_theta = angleObs(computeZAngle(other_rot));
+            obs.o_theta = angleObs(computeZAngle(
+                (to_view * other_rot).normalize()));
             obs.vel = xyzToPolar(to_view.rotateVec(other_vel));
 
             ++obs_idx;
@@ -540,30 +570,32 @@ inline void collectCarObservationSystem(
     }
 
     // Handle the enemy team
-    Team &other_team = ctx.data().teams[team_state.teamIdx ^ 1];
     for (int i = 0; i < consts::numCarsPerTeam; ++i) {
-        Entity other_player = other_team.players[i];
+        Entity enemy_player = enemy_team.players[i];
 
-        Vector3 other_pos = ctx.get<Position>(other_player);
-        Rotation other_rot = ctx.get<Rotation>(other_player);
-        Vector3 other_vel = ctx.get<Velocity>(other_player).linear;
+        Vector3 enemy_pos = ctx.get<Position>(enemy_player);
+        Rotation enemy_rot = ctx.get<Rotation>(enemy_player);
+        Vector3 enemy_vel = ctx.get<Velocity>(enemy_player).linear;
 
-        Vector3 to_other = other_pos - pos;
+        Vector3 to_enemy = enemy_pos - pos;
 
         OtherObservation &obs = enemy_obs.obs[i];
-        obs.polar = xyzToPolar(to_view.rotateVec(to_other));
-        obs.o_theta = angleObs(computeZAngle(other_rot));
-        obs.vel = xyzToPolar(other_vel);
+        obs.polar = xyzToPolar(to_view.rotateVec(to_enemy));
+        obs.o_theta = angleObs(computeZAngle(
+            (to_view * enemy_rot).normalize()));
+        obs.vel = xyzToPolar(to_view.rotateVec(enemy_vel));
     }
 
-    Entity ball_entity = ctx.data().ball;
-    Vector3 ball_pos = ctx.get<Position>(ball_entity);
-    Vector3 ball_vel = ctx.get<Velocity>(ball_entity).linear;
+    {
+        Entity ball_entity = ctx.data().ball;
+        Vector3 ball_pos = ctx.get<Position>(ball_entity);
+        Vector3 ball_vel = ctx.get<Velocity>(ball_entity).linear;
 
-    Vector3 to_ball = ball_pos - pos;
+        Vector3 to_ball = ball_pos - pos;
 
-    ball_obs.pos = xyzToPolar(to_view.rotateVec(to_ball));
-    ball_obs.vel = xyzToPolar(ball_vel);
+        ball_obs.pos = xyzToPolar(to_view.rotateVec(to_ball));
+        ball_obs.vel = xyzToPolar(ball_vel);
+    }
 
     steps_remaining_ob.t = ctx.singleton<MatchInfo>().stepsRemaining;
 }
@@ -977,7 +1009,8 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             Rotation,
             Velocity,
             SelfObservation,
-            GoalsObservation,
+            MyGoalObservation,
+            EnemyGoalObservation,
             TeamObservation,
             EnemyObservation,
             BallObservation,

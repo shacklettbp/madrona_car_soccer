@@ -266,6 +266,11 @@ void placeEntities(Engine &ctx)
             pos.x = ((float)car_idx+1.f) * (consts::worldWidth / ((float)consts::numCarsPerTeam+1.f)) -
                 consts::worldWidth/2.f;
 
+            // Make the first player in the team the rightmost
+            if (goal_idx == 1) {
+                pos.x *= -1;
+            }
+
             ctx.get<Position>(car_entity) = pos;
             ctx.get<Rotation>(car_entity) = rot;
 

@@ -52,7 +52,8 @@ public:
     madrona::py::Tensor doneTensor() const;
     madrona::py::Tensor ballTensor() const;
     madrona::py::Tensor selfObservationTensor() const;
-    madrona::py::Tensor goalsObservationTensor() const;
+    madrona::py::Tensor myGoalObservationTensor() const;
+    madrona::py::Tensor enemyGoalObservationTensor() const;
     madrona::py::Tensor teamObservationTensor() const;
     madrona::py::Tensor enemyObservationTensor() const;
     madrona::py::Tensor stepsRemainingTensor() const;

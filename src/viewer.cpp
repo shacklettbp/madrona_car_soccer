@@ -128,7 +128,8 @@ int main(int argc, char *argv[])
     });
 
     auto self_tensor = mgr.selfObservationTensor();
-    auto goals_tensor = mgr.goalsObservationTensor();
+    auto my_goal_tensor = mgr.myGoalObservationTensor();
+    auto enemy_goal_tensor = mgr.enemyGoalObservationTensor();
     auto team_tensor = mgr.teamObservationTensor();
     auto enemy_tensor = mgr.enemyObservationTensor();
     auto ball_tensor = mgr.ballTensor();
@@ -225,9 +226,13 @@ int main(int argc, char *argv[])
     SelfObservation *self_obs_readback = (SelfObservation *)cu::allocReadback(
         sizeof(SelfObservation) * num_views);
 
-    GoalsObservation *goals_obs_readback = 
-        (GoalsObservation *)cu::allocReadback(
-            sizeof(GoalsObservation) * num_views);
+    MyGoalObservation *my_goal_obs_readback = 
+        (MyGoalObservation *)cu::allocReadback(
+            sizeof(MyGoalObservation) * num_views);
+
+    EnemyGoalObservation *enemy_goal_obs_readback = 
+        (EnemyGoalObservation *)cu::allocReadback(
+            sizeof(EnemyGoalObservation) * num_views);
 
     Reward *reward_readback = (Reward *)cu::allocReadback(
         sizeof(Reward) * num_views);
@@ -281,7 +286,7 @@ int main(int argc, char *argv[])
 
         mgr.step();
 
-        //printObs();
+        printObs();
     }, [&]() {
         CountT cur_world_id = viewer.getCurrentWorldID();
         CountT agent_world_offset = cur_world_id * num_views;
@@ -289,8 +294,11 @@ int main(int argc, char *argv[])
         SelfObservation *self_obs_ptr =
             (SelfObservation *)self_tensor.devicePtr();
 
-        GoalsObservation *goals_obs_ptr =
-            (GoalsObservation *)goals_tensor.devicePtr();
+        MyGoalObservation *my_goal_obs_ptr =
+            (MyGoalObservation *)my_goal_tensor.devicePtr();
+
+        EnemyGoalObservation *enemy_goal_obs_ptr =
+            (EnemyGoalObservation *)enemy_goal_tensor.devicePtr();
 
         Reward *reward_ptr = (Reward *)reward_tensor.devicePtr();
 
@@ -298,7 +306,8 @@ int main(int argc, char *argv[])
             (BallObservation *)ball_tensor.devicePtr();
 
         self_obs_ptr += agent_world_offset;
-        goals_obs_ptr += agent_world_offset;
+        my_goal_obs_ptr += agent_world_offset;
+        enemy_goal_obs_ptr += agent_world_offset;
         reward_ptr += agent_world_offset;
 
         ball_obs_ptr += cur_world_id;
@@ -309,8 +318,12 @@ int main(int argc, char *argv[])
                             sizeof(SelfObservation) * num_views,
                             cudaMemcpyDeviceToHost, copy_strm);
 
-            cudaMemcpyAsync(goals_obs_readback, goals_obs_ptr,
-                            sizeof(GoalsObservation) * num_views,
+            cudaMemcpyAsync(my_goal_obs_readback, my_goal_obs_ptr,
+                            sizeof(MyGoalObservation) * num_views,
+                            cudaMemcpyDeviceToHost, copy_strm);
+
+            cudaMemcpyAsync(enemy_goal_obs_readback, enemy_goal_obs_ptr,
+                            sizeof(EnemyGoalObservation) * num_views,
                             cudaMemcpyDeviceToHost, copy_strm);
 
             cudaMemcpyAsync(reward_readback, reward_ptr,
@@ -324,7 +337,8 @@ int main(int argc, char *argv[])
             REQ_CUDA(cudaStreamSynchronize(copy_strm));
 
             self_obs_ptr = self_obs_readback;
-            goals_obs_ptr = goals_obs_readback;
+            my_goal_obs_ptr = my_goal_obs_readback;
+            enemy_goal_obs_ptr = enemy_goal_obs_readback;
             reward_ptr = reward_readback;
             ball_obs_ptr = ball_readback;
 #endif
@@ -335,7 +349,8 @@ int main(int argc, char *argv[])
             ImGui::Begin(player_str.c_str());
 
             const SelfObservation &cur_self = self_obs_ptr[i];
-            const GoalsObservation &cur_goals = goals_obs_ptr[i];
+            const MyGoalObservation &cur_my_goal = my_goal_obs_ptr[i];
+            const EnemyGoalObservation &cur_enemy_goal = enemy_goal_obs_ptr[i];
             const Reward &reward = reward_ptr[i];
             const BallObservation &ball = ball_obs_ptr[i];
 
@@ -348,14 +363,11 @@ int main(int argc, char *argv[])
             ImGui::Text("To Ball:       (%.1f, %.1f, %.1f)",
                 ball.pos.r, ball.pos.theta, ball.pos.phi);
 
-            for (CountT j = 0; j < 2; j++) {
-                const GoalObservation &cur_goal = cur_goals.obs[j];
+            ImGui::Text("To My Goal:    (%.1f, %.1f, %.1f)",
+                cur_my_goal.pos.r, cur_my_goal.pos.theta, cur_my_goal.pos.phi);
 
-                ImGui::Text(cur_goal.isOpponentGoal ?
-                        "To Enemy Goal: (%.1f, %.1f, %.1f)" :
-                        "To My Goal:    (%.1f, %.1f, %.1f)",
-                    cur_goal.pos.r, cur_goal.pos.theta, cur_goal.pos.phi);
-            }
+            ImGui::Text("To Enemy Goal: (%.1f, %.1f, %.1f)",
+                cur_enemy_goal.pos.r, cur_enemy_goal.pos.theta, cur_enemy_goal.pos.phi);
 
             ImGui::Text("Reward:    %.3f",
                 reward.v);

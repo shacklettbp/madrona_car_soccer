@@ -101,13 +101,12 @@ struct SelfObservation {
 
 };
 
-struct GoalObservation {
+struct MyGoalObservation {
     PolarObservation pos;
-    float isOpponentGoal;
 };
 
-struct GoalsObservation {
-    GoalObservation obs[2];
+struct EnemyGoalObservation {
+    PolarObservation pos;
 };
 
 static_assert(sizeof(SelfObservation) == sizeof(float) * 7);
@@ -312,7 +311,8 @@ struct Car : public madrona::Archetype<
 
     // Observations
     SelfObservation,
-    GoalsObservation,
+    MyGoalObservation,
+    EnemyGoalObservation,
     TeamObservation,
     EnemyObservation,
     BallObservation,
