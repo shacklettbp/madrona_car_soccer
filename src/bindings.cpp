@@ -11,7 +11,7 @@ namespace madEscape {
 
 // This file creates the python bindings used by the learning code.
 // Refer to the nanobind documentation for more details on these functions.
-NB_MODULE(madrona_rocket_league, m) {
+NB_MODULE(madrona_car_soccer, m) {
     // Each simulator has a madrona submodule that includes base types
     // like madrona::py::Tensor and madrona::py::PyExecMode.
     madrona::py::setupMadronaSubmodule(m);

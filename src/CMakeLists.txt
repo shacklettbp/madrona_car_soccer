@@ -56,11 +56,11 @@ target_compile_definitions(mad_escape_mgr PRIVATE
     -DDATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../data/"
 )
 
-madrona_python_module(madrona_rocket_league
+madrona_python_module(madrona_car_soccer
     bindings.cpp
 )
 
-target_link_libraries(madrona_rocket_league PRIVATE
+target_link_libraries(madrona_car_soccer PRIVATE
     mad_escape_mgr
 )
 

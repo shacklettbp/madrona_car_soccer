@@ -10,8 +10,8 @@ from functools import partial
 from time import time
 import os
 
-import madrona_rocket_league
-from madrona_rocket_league import SimFlags
+import madrona_car_soccer
+from madrona_car_soccer import SimFlags
 
 import madrona_learn
 from madrona_learn import (
@@ -55,8 +55,8 @@ arg_parser.add_argument('--profile-port', type=int, default=None)
 
 args = arg_parser.parse_args()
 
-sim = madrona_rocket_league.SimManager(
-    exec_mode = madrona_rocket_league.madrona.ExecMode.CUDA if args.gpu_sim else madrona_rocket_league.madrona.ExecMode.CPU,
+sim = madrona_car_soccer.SimManager(
+    exec_mode = madrona_car_soccer.madrona.ExecMode.CUDA if args.gpu_sim else madrona_car_soccer.madrona.ExecMode.CPU,
     gpu_id = args.gpu_id,
     num_worlds = args.num_worlds,
     auto_reset = True,
