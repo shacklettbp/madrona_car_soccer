@@ -222,88 +222,18 @@ def make_policy(dtype):
         skip_normalization = {},
     )
 
-    def sample_team_spirit(rnd):
-        return random.uniform(rnd, (), dtype=jnp.float32,
-                              minval=0, maxval=1)
-
-    def sample_hit_scale(rnd):
-        hit_exp = random.uniform(rnd, (), dtype=jnp.float32,
-                                 minval=-2, maxval=-1)
-
-        hit_scale = 10 ** hit_exp
-
-        return hit_scale
-
-    def init_reward_hyper_params(rnd):
-        spirit_rnd, hit_rnd = random.split(rnd, 2)
-
-        return jnp.stack((
-            sample_team_spirit(spirit_rnd),
-            sample_hit_scale(hit_rnd),
-        ))
-
-
-    def mutate_reward_hyper_params(rnd, cur):
-        def mutate_spirit(spirit, spirit_rnd):
-            def mutate(cur, r):
-                return jnp.clip(
-                    a = cur * random.uniform(
-                        r, (), dtype=jnp.float32, minval=0.8, maxval=1.2),
-                    a_min= 0,
-                    a_max = 1,
-                )
-
-            def resample(cur, r):
-                return sample_team_spirit(r)
-
-            spirit_rnd, resample_rnd = random.split(spirit_rnd)
-
-            should_resample = random.uniform(
-                resample_rnd, (), dtype=jnp.float32, minval=0, maxval=1) < 0.2
-
-            return lax.cond(should_resample, resample, mutate,
-                            spirit, hit_rnd)
-
-        def mutate_hit_scale(hit_scale, hit_rnd):
-            def mutate(cur, r):
-                return cur * random.uniform(r, (), dtype=jnp.float32,
-                    minval=0.8, maxval=1.2)
-
-            def resample(cur, r):
-                return sample_hit_scale(r)
-
-            hit_rnd, resample_rnd = random.split(hit_rnd)
-
-            should_resample = random.uniform(
-                resample_rnd, (), dtype=jnp.float32, minval=0, maxval=1) < 0.2
-
-            return lax.cond(should_resample, resample, mutate,
-                            hit_scale, hit_rnd)
-
-        spirit = cur[..., 0]
-        hit = cur[..., 1]
-
-        spirit_rnd, hit_rnd = random.split(rnd)
-
-        return jnp.stack((
-            mutate_spirit(spirit, spirit_rnd),
-            mutate_hit_scale(hit, hit_rnd),
-        ))
-
-    def get_team_a_score(match_result):
-        winner_id = match_result[..., 0]
+    def get_episode_scores(episode_result):
+        winner_id = episode_result[..., 0]
         is_a_winner = winner_id == 0
         is_b_winner = winner_id == 1
 
-        return jnp.where(
-            is_a_winner, 1, jnp.where(is_b_winner, 0, 0.5))
+        a_score = jnp.where(is_a_winner, 1, jnp.where(is_b_winner, 0, 0.5))
+        b_score = 1 - a_score
+
+        return jnp.stack((a_score, b_score))
 
     return Policy(
         actor_critic = actor_critic,
         obs_preprocess = obs_preprocess,
-        init_reward_hyper_params = init_reward_hyper_params,
-        mutate_reward_hyper_params = mutate_reward_hyper_params,
-        get_team_a_score = get_team_a_score,
+        get_episode_scores = get_episode_scores,
     )
-
-    return policy

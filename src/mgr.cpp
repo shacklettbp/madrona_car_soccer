@@ -364,7 +364,7 @@ struct Manager::CUDAImpl final : Manager::Impl {
 
         copyFromSim(*buffers++, mgr.rewardTensor());
         copyFromSim(*buffers++, mgr.doneTensor());
-        copyFromSim(*buffers++, mgr.matchResultTensor());
+        copyFromSim(*buffers++, mgr.episodeResultTensor());
     }
 #endif
 
@@ -860,7 +860,7 @@ TrainInterface Manager::trainInterface() const
             .rewards = rewardTensor().interface(),
             .dones = doneTensor().interface(),
             .pbt = {
-                { "match_results", matchResultTensor().interface() },
+                { "episode_results", episodeResultTensor().interface() },
             },
         },
     };
@@ -876,13 +876,13 @@ Tensor Manager::resetTensor() const
                                });
 }
 
-Tensor Manager::matchResultTensor() const
+Tensor Manager::episodeResultTensor() const
 {
-    return impl_->exportTensor(ExportID::MatchResult,
+    return impl_->exportTensor(ExportID::EpisodeResult,
                                TensorElementType::Int32,
                                {
                                    impl_->cfg.numWorlds,
-                                   sizeof(MatchResult) / sizeof(int32_t),
+                                   sizeof(EpisodeResult) / sizeof(int32_t),
                                });
 }
 

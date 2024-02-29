@@ -10,12 +10,14 @@ from functools import partial
 from time import time
 import os
 
+import numpy as np
+
 import madrona_car_soccer
 from madrona_car_soccer import SimFlags
 
 import madrona_learn
 from madrona_learn import (
-    TrainConfig, CustomMetricConfig, PPOConfig, PBTConfig, ParamRange,
+    TrainConfig, CustomMetricConfig, PPOConfig, PBTConfig, ParamExplore,
 )
 
 from jax_policy import make_policy
@@ -99,6 +101,10 @@ def host_cb(update_id, metrics, train_state_mgr):
     entropy_coefs = train_state_mgr.train_states.hyper_params.entropy_coef
     reward_hyper_params = train_state_mgr.policy_states.reward_hyper_params
 
+    old_printopts = np.get_printoptions()
+
+    np.set_printoptions(formatter={'float_kind':'{:.1e}'.format}, linewidth=150)
+
     print(lrs)
     print(entropy_coefs)
     print(reward_hyper_params[..., 0])
@@ -108,6 +114,8 @@ def host_cb(update_id, metrics, train_state_mgr):
     print_elos(elos)
 
     print()
+
+    np.set_printoptions(**old_printopts)
 
     metrics.tensorboard_log(tb_writer, update_id)
 
@@ -156,16 +164,20 @@ if args.pbt_ensemble_size != 0:
         self_play_portion = 0.125,
         cross_play_portion = 0.5,
         past_play_portion = 0.375,
-        lr_explore_range = ParamRange(
-            min = 0.1,
-            max = 10.0,
-            log10_space = True,
-        ),
-        entropy_explore_range = ParamRange(
-            min = 0.1,
-            max = 10.0,
-            log10_space = True,
-        )
+        reward_hyper_params_explore = {
+            'team_spirit': ParamExplore(
+                base = 1.0,
+                min_scale = 0.0,
+                max_scale = 1.0,
+                clip_perturb = True,
+            ),
+            'hit_scale': ParamExplore(
+                base = 0.01,
+                min_scale = 0.1,
+                max_scale = 10,
+                log10_scale = True,
+            ),
+        }
     )
 else:
     pbt_cfg = None
@@ -177,20 +189,39 @@ elif args.bf16:
 else:
     dtype = jnp.float32
 
+if pbt_cfg:
+    lr = ParamExplore(
+        base = args.lr,
+        min_scale = 0.1,
+        max_scale = 10.0,
+        log10_scale = True,
+    )
+
+    entropy_coef = ParamExplore(
+        base = args.entropy_loss_coef,
+        min_scale = 0.1,
+        max_scale = 10.0,
+        log10_scale = True,
+    )
+else:
+    lr = args.lr
+    entropy_coef = args.entropy_loss_coef
+
+
 cfg = TrainConfig(
     num_worlds = args.num_worlds,
     num_agents_per_world = 6,
     num_updates = args.num_updates,
     steps_per_update = args.steps_per_update,
     num_bptt_chunks = args.num_bptt_chunks,
-    lr = args.lr,
+    lr = lr,
     gamma = args.gamma,
     gae_lambda = 0.95,
     algo = PPOConfig(
         num_mini_batches = args.num_minibatches,
         clip_coef = 0.2,
         value_loss_coef = args.value_loss_coef,
-        entropy_coef = args.entropy_loss_coef,
+        entropy_coef = entropy_coef,
         max_grad_norm = 0.5,
         num_epochs = 2,
         clip_value_loss = args.clip_value_loss,

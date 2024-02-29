@@ -135,7 +135,7 @@ int main(int argc, char *argv[])
     auto ball_tensor = mgr.ballTensor();
     auto steps_remaining_tensor = mgr.stepsRemainingTensor();
     auto reward_tensor = mgr.rewardTensor();
-    auto match_result_tensor = mgr.matchResultTensor();
+    auto episode_result_tensor = mgr.episodeResultTensor();
 
     // Printers
     auto self_printer = self_tensor.makePrinter();
@@ -144,7 +144,7 @@ int main(int argc, char *argv[])
     auto ball_printer = ball_tensor.makePrinter();
     auto steps_remaining_printer = steps_remaining_tensor.makePrinter();
     auto reward_printer = reward_tensor.makePrinter();
-    auto match_result_printer = match_result_tensor.makePrinter();
+    auto episode_result_printer = episode_result_tensor.makePrinter();
 
     auto ckpt_tensor = mgr.checkpointTensor();
     auto load_ckpt_tensor = mgr.loadCheckpointTensor();
@@ -215,8 +215,8 @@ int main(int argc, char *argv[])
         printf("Reward\n");
         reward_printer.print();
 
-        printf("Match Result\n");
-        match_result_printer.print();
+        printf("Episode Result\n");
+        episode_result_printer.print();
 
         printf("\n");
     };
@@ -286,7 +286,7 @@ int main(int argc, char *argv[])
 
         mgr.step();
 
-        printObs();
+        //printObs();
     }, [&]() {
         CountT cur_world_id = viewer.getCurrentWorldID();
         CountT agent_world_offset = cur_world_id * num_views;

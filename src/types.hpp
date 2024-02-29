@@ -60,7 +60,7 @@ static_assert(sizeof(WorldReset) == sizeof(int32_t));
 static_assert(sizeof(Reward) == sizeof(float));
 static_assert(sizeof(Done) == sizeof(int32_t));
 
-struct MatchResult {
+struct EpisodeResult {
     int32_t winResult;
     int32_t numTeamAGoals;
     int32_t numTeamBGoals;

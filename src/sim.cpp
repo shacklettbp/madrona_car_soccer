@@ -47,7 +47,7 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
 
     registry.registerSingleton<WorldReset>();
     registry.registerSingleton<MatchInfo>();
-    registry.registerSingleton<MatchResult>();
+    registry.registerSingleton<EpisodeResult>();
     registry.registerSingleton<TeamRewardState>();
     registry.registerSingleton<SimFlags>();
 
@@ -60,7 +60,7 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerArchetype<Collision>();
 
     registry.exportSingleton<WorldReset>((uint32_t)ExportID::Reset);
-    registry.exportSingleton<MatchResult>((uint32_t)ExportID::MatchResult);
+    registry.exportSingleton<EpisodeResult>((uint32_t)ExportID::EpisodeResult);
 
     registry.exportSingleton<LoadCheckpoint>(
         (uint32_t)ExportID::LoadCheckpoint);
@@ -601,13 +601,13 @@ inline void collectCarObservationSystem(
 }
 
 inline void updateResultsSystem(Engine &ctx,
-                                MatchResult &match_result)
+                                EpisodeResult &episode_result)
 {
     const MatchInfo &match_info = ctx.singleton<MatchInfo>();
 
     if (match_info.stepsRemaining == consts::episodeLen - 1) {
-        match_result.numTeamAGoals = 0;
-        match_result.numTeamBGoals = 0;
+        episode_result.numTeamAGoals = 0;
+        episode_result.numTeamBGoals = 0;
     }
 
     Entity ball_entity = ctx.data().ball;
@@ -615,19 +615,19 @@ inline void updateResultsSystem(Engine &ctx,
 
     if (ball_gs.state == BallGoalState::State::InGoal) {
         if (ball_gs.data == ctx.data().teams[0].goalIdx) {
-            match_result.numTeamAGoals += 1;
+            episode_result.numTeamAGoals += 1;
         } else {
-            match_result.numTeamBGoals += 1;
+            episode_result.numTeamBGoals += 1;
         }
     }
 
     if (match_info.stepsRemaining == 0) {
-        if (match_result.numTeamAGoals > match_result.numTeamBGoals) {
-            match_result.winResult = 0;
-        } else if (match_result.numTeamBGoals > match_result.numTeamAGoals) {
-            match_result.winResult = 1;
+        if (episode_result.numTeamAGoals > episode_result.numTeamBGoals) {
+            episode_result.winResult = 0;
+        } else if (episode_result.numTeamBGoals > episode_result.numTeamAGoals) {
+            episode_result.winResult = 1;
         } else {
-            match_result.winResult = 2;
+            episode_result.winResult = 2;
         }
     }
 }
@@ -665,7 +665,7 @@ inline void individualRewardSystem(
 
     const MatchInfo &match_info = ctx.singleton<MatchInfo>();
     if (match_info.stepsRemaining == 0) {
-        int32_t win_result = ctx.singleton<MatchResult>().winResult;
+        int32_t win_result = ctx.singleton<EpisodeResult>().winResult;
 
         if (win_result == 2) {
             reward -= 5.f;
@@ -838,11 +838,11 @@ inline void loadCheckpointSystem(Engine &ctx, const Checkpoint &ckpt)
 
     {
         MatchInfo &match_info = ctx.singleton<MatchInfo>();
-        MatchResult &match_result = ctx.singleton<MatchResult>();
+        EpisodeResult &episode_result = ctx.singleton<EpisodeResult>();
 
         match_info.stepsRemaining = ckpt.stepsRemaining;
-        match_result.numTeamAGoals = ckpt.numTeamAGoals;
-        match_result.numTeamBGoals = ckpt.numTeamBGoals;
+        episode_result.numTeamAGoals = ckpt.numTeamAGoals;
+        episode_result.numTeamBGoals = ckpt.numTeamBGoals;
     }
 }
 
@@ -875,11 +875,11 @@ inline void checkpointSystem(Engine &ctx, Checkpoint &ckpt)
 
     {
         const MatchInfo &match_info = ctx.singleton<MatchInfo>();
-        const MatchResult &match_result = ctx.singleton<MatchResult>();
+        const EpisodeResult &episode_result = ctx.singleton<EpisodeResult>();
 
         ckpt.stepsRemaining = match_info.stepsRemaining;
-        ckpt.numTeamAGoals = match_result.numTeamAGoals;
-        ckpt.numTeamBGoals = match_result.numTeamBGoals;
+        ckpt.numTeamAGoals = episode_result.numTeamAGoals;
+        ckpt.numTeamBGoals = episode_result.numTeamBGoals;
     }
 }
 
@@ -953,7 +953,7 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
 
     auto update_results_sys = builder.addToGraph<ParallelForNode<Engine,
         updateResultsSystem,
-            MatchResult
+            EpisodeResult
         >>({velocity_correct_system});
 
     auto individual_reward_sys = builder.addToGraph<ParallelForNode<Engine,
