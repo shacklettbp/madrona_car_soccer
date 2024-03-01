@@ -132,16 +132,16 @@ cfg = madrona_learn.EvalConfig(
     team_size = team_size,
     num_teams = num_teams,
     num_eval_steps = args.num_steps,
+    eval_competitive = True,
     policy_dtype = dtype,
 )
 
-elos = policy_states.fitness_score[..., 0]
-print_elos(elos)
+mmrs = policy_states.mmr
+print_elos(mmrs.elo)
 
-fitness_scores = madrona_learn.eval_policies(
+mmrs = madrona_learn.eval_policies(
     dev, cfg, sim_init, sim_step, policy, policy_states, iter_cb)
 
-elos = fitness_scores[..., 0]
-print_elos(elos)
+print_elos(mmrs.elo)
 
 del sim
