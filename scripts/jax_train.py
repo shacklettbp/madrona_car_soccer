@@ -110,7 +110,7 @@ def host_cb(update_id, metrics, train_state_mgr):
     print(reward_hyper_params[..., 0])
     print(reward_hyper_params[..., 1])
 
-    elos = train_state_mgr.policy_states.fitness_score[..., 0]
+    elos = train_state_mgr.policy_states.mmr.elo
     print_elos(elos)
 
     print()
