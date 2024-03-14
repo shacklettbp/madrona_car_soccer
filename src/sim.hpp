@@ -41,12 +41,9 @@ enum class TaskGraphID : uint32_t {
 // Stores values for the ObjectID component that links entities to
 // render / physics assets.
 enum class SimObject : uint32_t {
-    Cube,
-    Wall,
-    Door,
     AgentTeam0,
     AgentTeam1,
-    Button,
+    Wall,
     Sphere,
     Plane,
     NumObjects,
@@ -119,8 +116,6 @@ struct Sim : public madrona::WorldBase {
 
     // There is a single ball in the world
     Entity ball;
-
-    madrona::Query<CollisionData> collisionQuery;
 };
 
 class Engine : public ::madrona::CustomContext<Engine, Sim> {

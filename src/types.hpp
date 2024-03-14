@@ -26,6 +26,7 @@ using madrona::phys::ExternalForce;
 using madrona::phys::ExternalTorque;
 using madrona::math::Vector3;
 using madrona::math::Quat;
+using madrona::math::Diag3x3;
 
 // WorldReset is a per-world singleton component that causes the current
 // episode to be terminated and the world regenerated
@@ -151,41 +152,6 @@ struct StepsRemainingObservation {
     uint32_t t;
 };
 
-// Tracks progress the agent has made through the challenge, used to add
-// reward when more progress has been made
-struct Progress {
-    float maxY;
-};
-
-// Per-agent component storing Entity IDs of the other agents. Used to
-// build the egocentric observations of their state.
-struct OtherAgents {
-    madrona::Entity e[consts::numAgents - 1];
-};
-
-// Tracks if an agent is currently grabbing another entity
-struct GrabState {
-    Entity constraintEntity;
-};
-
-// Not an actual momentum
-struct Momentum {
-    float rho;
-};
-
-// This enum is used to track the type of each entity for the purposes of
-// classifying the objects hit by each lidar sample.
-enum class EntityType : uint32_t {
-    None,
-    Button,
-    Cube,
-    Wall,
-    Agent,
-    Door,
-    Ball,
-    NumTypes,
-};
-
 enum class DynamicEntityType : uint32_t {
     None,
     Car,
@@ -208,18 +174,6 @@ struct Arena {
     Entity longBorders[2];
 
     WallPlane wallPlanes[4];
-};
-
-// For car-car collision, a is the car to which we subtract `overlap`,
-// and b is the car to which we add `overlap`.
-struct CollisionData {
-    Entity a;
-    Entity b;
-
-    // These vectors will be used differently depending on what type 
-    // of entity a and b are.
-    madrona::math::Vector3 overlap;
-    madrona::math::Vector3 diff;
 };
 
 struct TeamState {
@@ -283,25 +237,39 @@ struct Checkpoint {
 };
 
 struct Ball : public madrona::Archetype<
-    Position,
+    Position, 
     Rotation,
     Scale,
     Velocity,
     ObjectID,
-    EntityType,
+    ResponseType,
+    madrona::phys::solver::SubstepPrevState,
+    madrona::phys::solver::PreSolvePositional,
+    madrona::phys::solver::PreSolveVelocity,
+    ExternalForce,
+    ExternalTorque,
+    madrona::phys::broadphase::LeafID,
+
     BallGoalState,
     DynamicEntityType,
     madrona::render::Renderable
 > {};
 
 struct Car : public madrona::Archetype<
-    Position,
+    Position, 
     Rotation,
     Scale,
     Velocity,
     ObjectID,
+    ResponseType,
+    madrona::phys::solver::SubstepPrevState,
+    madrona::phys::solver::PreSolvePositional,
+    madrona::phys::solver::PreSolveVelocity,
+    ExternalForce,
+    ExternalTorque,
+    madrona::phys::broadphase::LeafID,
+
     Action,
-    EntityType,
     Done,
     DynamicEntityType,
     TeamState,
@@ -338,12 +306,8 @@ struct PhysicsEntity : public madrona::Archetype<
     ExternalForce,
     ExternalTorque,
     madrona::phys::broadphase::LeafID,
-    EntityType,
-    madrona::render::Renderable
-> {};
 
-struct Collision : public madrona::Archetype<
-    CollisionData
+    madrona::render::Renderable
 > {};
 
 struct Team {

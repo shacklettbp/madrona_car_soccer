@@ -331,26 +331,35 @@ int main(int argc, char *argv[])
     {
         using Key = Viewer::KeyboardKey;
 
+        const int32_t move_mid = consts::numMoveAmountBuckets / 2;
+        const int32_t turn_mid = consts::numTurnBuckets / 2;
+
         int32_t y = 0;
         int32_t r = 0;
 
+        int32_t move_delta = 1;
+        int32_t turn_delta = 1;
+
+        if (input.keyPressed(Key::Shift)) {
+            move_delta = move_mid;
+            turn_delta = turn_mid;
+        }
+
         if (input.keyPressed(Key::W)) {
-            y += 1;
+            y += move_delta;
         }
         if (input.keyPressed(Key::S)) {
-            y -= 1;
+            y -= move_delta;
         }
 
         if (input.keyPressed(Key::Q)) {
-            r += 1;
+            r += turn_delta;
         }
         if (input.keyPressed(Key::E)) {
-            r -= 1;
+            r -= turn_delta;
         }
 
-        int32_t move_amount = y+1;
-
-        mgr.setAction(world_idx, agent_idx, move_amount, r+1);
+        mgr.setAction(world_idx, agent_idx, move_mid + y, turn_mid + r);
     }, [&]() {
         if (replay_log.has_value()) {
             bool replay_finished = replayStep();

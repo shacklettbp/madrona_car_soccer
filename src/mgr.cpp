@@ -83,6 +83,7 @@ static inline Optional<render::RenderManager> initRenderManager(
     });
 }
 
+#ifdef MADRONA_CUDA_SUPPORT
 static inline uint64_t numTensorBytes(const Tensor &t)
 {
     uint64_t num_items = 1;
@@ -93,6 +94,7 @@ static inline uint64_t numTensorBytes(const Tensor &t)
 
     return num_items * (uint64_t)t.numBytesPerItem();
 }
+#endif
 
 struct Manager::Impl {
     Config cfg;
@@ -409,22 +411,17 @@ static void loadRenderObjects(render::RenderManager &render_mgr,
                               Vector3 *team_colors)
 {
     std::array<std::string, (size_t)SimObject::NumObjects> render_asset_paths;
-    render_asset_paths[(size_t)SimObject::Cube] =
-        (std::filesystem::path(DATA_DIR) / "cube_render.obj").string();
-    render_asset_paths[(size_t)SimObject::Wall] =
-        (std::filesystem::path(DATA_DIR) / "wall_render.obj").string();
-    render_asset_paths[(size_t)SimObject::Door] =
-        (std::filesystem::path(DATA_DIR) / "wall_render.obj").string();
     render_asset_paths[(size_t)SimObject::AgentTeam0] =
         (std::filesystem::path(DATA_DIR) / "cube_render.obj").string();
     render_asset_paths[(size_t)SimObject::AgentTeam1] =
         (std::filesystem::path(DATA_DIR) / "cube_render.obj").string();
-    render_asset_paths[(size_t)SimObject::Button] =
-        (std::filesystem::path(DATA_DIR) / "cube_render.obj").string();
-    render_asset_paths[(size_t)SimObject::Plane] =
-        (std::filesystem::path(DATA_DIR) / "plane.obj").string();
+
+    render_asset_paths[(size_t)SimObject::Wall] =
+        (std::filesystem::path(DATA_DIR) / "wall_render.obj").string();
     render_asset_paths[(size_t)SimObject::Sphere] =
         (std::filesystem::path(DATA_DIR) / "sphere.obj").string();
+    render_asset_paths[(size_t)SimObject::Plane] =
+        (std::filesystem::path(DATA_DIR) / "plane.obj").string();
 
     std::array<const char *, (size_t)SimObject::NumObjects> render_asset_cstrs;
     for (size_t i = 0; i < render_asset_paths.size(); i++) {
@@ -453,22 +450,13 @@ static void loadRenderObjects(render::RenderManager &render_mgr,
     });
 
     // Override materials
-    render_assets->objects[(CountT)SimObject::Cube].meshes[0].materialIDX = 0;
-    render_assets->objects[(CountT)SimObject::Wall].meshes[0].materialIDX = 3;
-    render_assets->objects[(CountT)SimObject::Door].meshes[0].materialIDX = 5;
-
     render_assets->objects[(CountT)SimObject::AgentTeam0].meshes[0].materialIDX = 0;
     render_assets->objects[(CountT)SimObject::AgentTeam1].meshes[0].materialIDX = 1;
 
-#if 0
-    render_assets->objects[(CountT)SimObject::Agent].meshes[0].materialIDX = 2;
-    render_assets->objects[(CountT)SimObject::Agent].meshes[1].materialIDX = 3;
-    render_assets->objects[(CountT)SimObject::Agent].meshes[2].materialIDX = 3;
-#endif
+    render_assets->objects[(CountT)SimObject::Wall].meshes[0].materialIDX = 3;
 
-    render_assets->objects[(CountT)SimObject::Button].meshes[0].materialIDX = 6;
-    render_assets->objects[(CountT)SimObject::Plane].meshes[0].materialIDX = 6;
     render_assets->objects[(CountT)SimObject::Sphere].meshes[0].materialIDX = 9;
+    render_assets->objects[(CountT)SimObject::Plane].meshes[0].materialIDX = 6;
 
     render_mgr.loadObjects(render_assets->objects, materials, {
         { (std::filesystem::path(DATA_DIR) /
@@ -485,18 +473,12 @@ static void loadRenderObjects(render::RenderManager &render_mgr,
 static void loadPhysicsObjects(PhysicsLoader &loader)
 {
     std::array<std::string, (size_t)SimObject::NumObjects - 1> asset_paths;
-    asset_paths[(size_t)SimObject::Cube] =
-        (std::filesystem::path(DATA_DIR) / "cube_collision.obj").string();
+    asset_paths[(size_t)SimObject::AgentTeam0] =
+        (std::filesystem::path(DATA_DIR) / "car_collision.obj").string();
+    asset_paths[(size_t)SimObject::AgentTeam1] =
+        (std::filesystem::path(DATA_DIR) / "car_collision.obj").string();
     asset_paths[(size_t)SimObject::Wall] =
         (std::filesystem::path(DATA_DIR) / "wall_collision.obj").string();
-    asset_paths[(size_t)SimObject::Door] =
-        (std::filesystem::path(DATA_DIR) / "wall_collision.obj").string();
-    asset_paths[(size_t)SimObject::AgentTeam0] =
-        (std::filesystem::path(DATA_DIR) / "agent_collision_simplified.obj").string();
-    asset_paths[(size_t)SimObject::AgentTeam1] =
-        (std::filesystem::path(DATA_DIR) / "agent_collision_simplified.obj").string();
-    asset_paths[(size_t)SimObject::Button] =
-        (std::filesystem::path(DATA_DIR) / "cube_collision.obj").string();
     asset_paths[(size_t)SimObject::Sphere] =
         (std::filesystem::path(DATA_DIR) / "cube_collision.obj").string();
 
@@ -545,32 +527,17 @@ static void loadPhysicsObjects(PhysicsLoader &loader)
         };
     };
 
-    setupHull(SimObject::Cube, 0.075f, {
-        .muS = 0.5f,
-        .muD = 0.75f,
-    });
-
-    setupHull(SimObject::Wall, 0.f, {
-        .muS = 0.5f,
-        .muD = 0.5f,
-    });
-
-    setupHull(SimObject::Door, 0.f, {
-        .muS = 0.5f,
-        .muD = 0.5f,
-    });
-
     setupHull(SimObject::AgentTeam0, 1.f, {
-        .muS = 0.5f,
-        .muD = 5.0f,
+        .muS = 2.f,
+        .muD = 2.f,
     });
 
     setupHull(SimObject::AgentTeam1, 1.f, {
-        .muS = 0.5f,
-        .muD = 5.0f,
+        .muS = 2.f,
+        .muD = 2.f,
     });
 
-    setupHull(SimObject::Button, 1.f, {
+    setupHull(SimObject::Wall, 0.f, {
         .muS = 0.5f,
         .muD = 0.5f,
     });
@@ -588,8 +555,8 @@ static void loadPhysicsObjects(PhysicsLoader &loader)
         .prims = Span<const SourceCollisionPrimitive>(&plane_prim, 1),
         .invMass = 0.f,
         .friction = {
-            .muS = 0.5f,
-            .muD = 0.5f,
+            .muS = 2.f,
+            .muD = 2.f,
         },
     };
 
@@ -725,7 +692,7 @@ Manager::Impl * Manager::Impl::make(
         (void)stagger_shuffle_key;
 
         PhysicsLoader phys_loader(ExecMode::CPU, 10);
-        // loadPhysicsObjects(phys_loader);
+        loadPhysicsObjects(phys_loader);
 
         ObjectManager *phys_obj_mgr = &phys_loader.getObjectManager();
         sim_cfg.rigidBodyObjMgr = phys_obj_mgr;

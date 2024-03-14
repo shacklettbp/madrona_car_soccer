@@ -25,9 +25,6 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerComponent<SelfObservation>();
     registry.registerComponent<Reward>();
     registry.registerComponent<Done>();
-    registry.registerComponent<GrabState>();
-    registry.registerComponent<Progress>();
-    registry.registerComponent<OtherAgents>();
     registry.registerComponent<SelfObservation>();
     registry.registerComponent<MyGoalObservation>();
     registry.registerComponent<EnemyGoalObservation>();
@@ -37,10 +34,8 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
 
     registry.registerComponent<Lidar>();
     registry.registerComponent<StepsRemainingObservation>();
-    registry.registerComponent<EntityType>();
     registry.registerComponent<BallGoalState>();
     registry.registerComponent<DynamicEntityType>();
-    registry.registerComponent<CollisionData>();
     registry.registerComponent<TeamState>();
     registry.registerComponent<CarBallTouchState>();
     registry.registerComponent<CarPolicy>();
@@ -57,41 +52,36 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
     registry.registerArchetype<PhysicsEntity>();
     registry.registerArchetype<Car>();
     registry.registerArchetype<Ball>();
-    registry.registerArchetype<Collision>();
 
-    registry.exportSingleton<WorldReset>((uint32_t)ExportID::Reset);
-    registry.exportSingleton<EpisodeResult>((uint32_t)ExportID::EpisodeResult);
+    registry.exportSingleton<WorldReset>(
+        ExportID::Reset);
+    registry.exportSingleton<EpisodeResult>(
+        ExportID::EpisodeResult);
 
     registry.exportSingleton<LoadCheckpoint>(
-        (uint32_t)ExportID::LoadCheckpoint);
+        ExportID::LoadCheckpoint);
     registry.exportSingleton<Checkpoint>(
-        (uint32_t)ExportID::Checkpoint);
+        ExportID::Checkpoint);
 
     registry.exportColumn<Car, BallObservation>(
-        (uint32_t)ExportID::BallObservation);
-    registry.exportColumn<Car, Action>((uint32_t)ExportID::Action);
+        ExportID::BallObservation);
+    registry.exportColumn<Car, Action>(ExportID::Action);
     registry.exportColumn<Car, SelfObservation>(
-        (uint32_t)ExportID::SelfObservation);
+        ExportID::SelfObservation);
     registry.exportColumn<Car, MyGoalObservation>(
-        (uint32_t)ExportID::MyGoalObservation);
+        ExportID::MyGoalObservation);
     registry.exportColumn<Car, EnemyGoalObservation>(
-        (uint32_t)ExportID::EnemyGoalObservation);
+        ExportID::EnemyGoalObservation);
     registry.exportColumn<Car, TeamObservation>(
-        (uint32_t)ExportID::TeamObservation);
+        ExportID::TeamObservation);
     registry.exportColumn<Car, EnemyObservation>(
-        (uint32_t)ExportID::EnemyObservation);
+        ExportID::EnemyObservation);
     registry.exportColumn<Car, StepsRemainingObservation>(
-        (uint32_t)ExportID::StepsRemaining);
-    registry.exportColumn<Car, Reward>((uint32_t)ExportID::Reward);
-    registry.exportColumn<Car, Done>((uint32_t)ExportID::Done);
+        ExportID::StepsRemaining);
+    registry.exportColumn<Car, Reward>(ExportID::Reward);
+    registry.exportColumn<Car, Done>(ExportID::Done);
 
-    registry.exportColumn<Car, CarPolicy>(
-        (uint32_t)ExportID::CarPolicy);
-}
-
-static inline void cleanupWorld(Engine &ctx)
-{
-    (void)ctx;
+    registry.exportColumn<Car, CarPolicy>(ExportID::CarPolicy);
 }
 
 static inline void initWorld(Engine &ctx)
@@ -133,7 +123,6 @@ inline void resetSystem(Engine &ctx, WorldReset &reset)
     if (should_reset != 0) {
         reset.reset = 0;
 
-        cleanupWorld(ctx);
         initWorld(ctx);
     } else if (ball_gs.state == BallGoalState::State::InGoal) {
         placeEntities(ctx);
@@ -142,212 +131,45 @@ inline void resetSystem(Engine &ctx, WorldReset &reset)
 
 // Translates discrete actions from the Action component to forces
 // used by the physics simulation.
-inline void carMovementSystem(Engine &engine,
-                              Entity e,
-                              Action &action, 
-                              Position &pos,
-                              Rotation &rot, 
-                              Velocity &vel,
-                              CarBallTouchState &touch_state)
+inline void carMovementSystem(Engine &,
+                              Action action, 
+                              Rotation rot, 
+                              ExternalForce &ext_force,
+                              ExternalTorque &ext_torque)
 {
-    touch_state.touched = false;
+    constexpr float move_max = 50;
+    constexpr float turn_max = 30;
 
-    constexpr float move_angle_per_bucket =
-        3.f * math::pi / float(consts::numTurnBuckets);
-    float move_angle = float(action.rotate-1) * move_angle_per_bucket *
-                       consts::deltaT;
-    Quat rot_diff = Quat::angleAxis(move_angle, { 0.0f, 0.0f, 1.0f });
+    constexpr float move_delta_per_bucket = 
+        move_max / (consts::numMoveAmountBuckets / 2);
+    constexpr float turn_delta_per_bucket = 
+        turn_max / (consts::numTurnBuckets / 2);
 
-    rot *= rot_diff;
+    float move_amount = move_delta_per_bucket *
+        (action.moveAmount - consts::numMoveAmountBuckets / 2);
 
-    Vector3 fwd = rot.rotateVec({ 0.f, 1.f, 0.f });
+    float t_z = turn_delta_per_bucket *
+        (action.rotate - consts::numTurnBuckets / 2);
 
-    // Calculate the uninterupted displacement vector, and velocity.
-    vel.linear += (float)(action.moveAmount-1) * 
-        consts::carAcceleration * fwd * consts::deltaT;
-
-    // Hack friction
-    // vel.linear *= 0.95f;
-    
-    // This is the uninterrupted displacement vector given no collisions.
-    Vector3 dx = vel.linear * consts::deltaT;
-    pos += dx;
-    
-    { // Determine collision with the ball
-        Entity ball_e = engine.data().ball;
-        Vector3 ball_pos = engine.get<Position>(ball_e);
-        Vector3 ball_dx = engine.get<Velocity>(ball_e).linear * consts::deltaT;
-
-        AABB car_aabb = { -consts::agentDimensions, consts::agentDimensions };
-
-        // Transform the ball's position and velocities into the ball's frame
-        Vector3 rel_ball_pos = rot.inv().rotateVec(ball_pos - pos);
-        Vector3 rel_ball_dx = rot.inv().rotateVec(ball_dx/* - dx*/);
-
-        Sphere ball_sphere = { rel_ball_pos, consts::ballRadius };
-
-        float out_t;
-        Vector3 sphere_pos_out;
-        
-        if (intersectMovingSphereAABB(ball_sphere, rel_ball_dx,
-                                      car_aabb, out_t, sphere_pos_out)) {
-            Vector3 diff = rot.rotateVec(sphere_pos_out.normalize());
-            Vector3 overlap = rot.rotateVec(sphere_pos_out - rel_ball_pos);
-
-            CollisionData collision = {
-                .a = ball_e,
-                .b = e,
-                .overlap = overlap,
-                .diff = diff,
-            };
-
-            // TODO: Create collision entity
-            Loc loc = engine.makeTemporary<Collision>();
-            engine.get<CollisionData>(loc) = collision;
-
-            touch_state.touched = true;
-        }
-    }
-
-
-    auto create_obb = [](Position pos, Rotation rot) -> OBB {
-        static Vector3 car_ground_verts[4] = {
-            Vector3{ -consts::agentDimensions.x, consts::agentDimensions.y, 0.f },
-            Vector3{ consts::agentDimensions.x, consts::agentDimensions.y, 0.f },
-            Vector3{ consts::agentDimensions.x, -consts::agentDimensions.y, 0.f },
-            Vector3{ -consts::agentDimensions.x, -consts::agentDimensions.y, 0.f }
-        };
-
-        OBB obb = {};
-
-        for (int i = 0; i < 4; ++i) {
-            auto v = rot.rotateVec(car_ground_verts[i]) + 
-                     Vector3{pos.x, pos.y, 0.f};
-            obb.verts[i] = { v.x, v.y };
-        }
-
-        return obb;
-    };
-
-
-    OBB e_obb = create_obb(pos, rot);
-
-    // Check the other cars for collisions
-    for (CountT team_idx = 0; team_idx < 2; ++team_idx) {
-        Team &team = engine.data().teams[team_idx];
-        for (int i = 0; i < consts::numCarsPerTeam; ++i) {
-            Entity car = team.players[i];
-
-            if (car != e && car.id < e.id) {
-                // Check for collision
-                OBB car_obb = create_obb(engine.get<Position>(car),
-                                         engine.get<Rotation>(car));
-
-                float min_overlap;
-                Vector2 min_overlap_axis;
-                if (intersectMovingOBBs2D(e_obb, car_obb,
-                                          min_overlap, min_overlap_axis)) {
-
-                    Vector3 diff = 0.5f * min_overlap * 
-                        Vector3{min_overlap_axis.x, min_overlap_axis.y, 0.f};
-
-                    // TODO: Create collision data
-                    CollisionData collision = {
-                        .a = e,
-                        .b = car,
-                        .overlap = diff,
-                        .diff = diff
-                    };
-
-                    Loc loc = engine.makeTemporary<Collision>();
-                    engine.get<CollisionData>(loc) = collision;
-                }
-            }
-        }
-    }
-
-    // Check the walls for collisions
-    for (int i = 0; i < 4; ++i) {
-        auto &plane = engine.data().arena.wallPlanes[i];
-
-        float overlap;
-        if (intersectMovingOBBWall(e_obb, plane, overlap)) {
-            Vector3 overlap_vec = overlap *
-                Vector3{plane.normal.x, plane.normal.y, 0.0f};
-
-#if 0
-            pos -= overlap_vec;
-#endif
-
-            CollisionData collision = {
-                .a = e,
-                .b = Entity::none(),
-                .overlap = overlap_vec,
-                .diff = overlap_vec
-            };
-
-            Loc loc = engine.makeTemporary<Collision>();
-            engine.get<CollisionData>(loc) = collision;
-        }
-    }
-
-#if 0
-    vel.linear *= 0.95f;
-#endif
+    ext_force = rot.rotateVec(move_amount * math::fwd);
+    ext_torque = Vector3 { 0, 0, t_z };
 }
 
-inline void checkBallGoalPosts(Engine &engine,
-                               Entity e,
-                               Position &pos,
-                               Velocity &vel,
-                               BallGoalState &ball_gs,
-                               int goal_idx)
+inline void checkGoalSystem(Engine &ctx,
+                            Position pos,
+                            BallGoalState &ball_gs)
 {
     (void)ball_gs;
 
-    float sign = (goal_idx == 0) ? +1.f : -1.f;
-
-    Goal &goal = engine.data().arena.goals[goal_idx];
-
-    for (int i = 0; i < 2; ++i) {
-        Vector2 post0_pos = Vector2::fromVector3(
-                engine.get<Position>(goal.outerBorders[i]));
-        Scale post0_scale_3d = engine.get<Scale>(goal.outerBorders[i]);
-
-        Vector2 post0_scale = { post0_scale_3d.d0, post0_scale_3d.d1 };
-
-        WallSegment s0 = {
-            { post0_pos + Vector2{ post0_scale.x/2.f, 0.f },
-              post0_pos - Vector2{ post0_scale.x/2.f, 0.f }},
-            Vector2{ 0.f, -sign }
-        };
-
-        float min_overlap;
-        if (intersectSphereWallSeg(Sphere{ pos, consts::ballRadius },
-                    s0, min_overlap)) {
-            Vector3 normal_3d = Vector3{s0.normal.x, s0.normal.y, 0.f};
-
-            CollisionData collision = {
-                .a = e,
-                .b = Entity::none(),
-                .overlap = normal_3d * min_overlap,
-                .diff = reflect(vel.linear, normal_3d),
-            };
-
-            Loc loc = engine.makeTemporary<Collision>();
-            engine.get<CollisionData>(loc) = collision;
-        }
-    }
-
     float goal_post_rad = (consts::worldWidth / 3.f + consts::wallWidth*2.f)/2.f;
 
-    if (goal_idx == 0 && pos.y < -consts::worldLength*0.5f) {
+    if (pos.y < -consts::worldLength*0.5f) {
         if (pos.x > (-consts::worldWidth/3.f + goal_post_rad) &&
             pos.x < (+consts::worldWidth/3.f - goal_post_rad)) {
             ball_gs.state = BallGoalState::State::InGoal;
             ball_gs.data = 0;
         }
-    } else if (goal_idx == 1 && pos.y > consts::worldLength*0.5f) {
+    } else if (pos.y > consts::worldLength*0.5f) {
         if (pos.x > (-consts::worldWidth/3.f + goal_post_rad) &&
             pos.x < (+consts::worldWidth/3.f - goal_post_rad)) {
             ball_gs.state = BallGoalState::State::InGoal;
@@ -356,97 +178,12 @@ inline void checkBallGoalPosts(Engine &engine,
     }
 }
 
-inline void ballMovementSystem(Engine &engine,
-                               Entity e,
-                               Position &pos,
-                               Velocity &vel,
-                               BallGoalState &ball_gs)
+inline void checkBallTouchSystem(Engine &ctx,
+                                 Position pos,
+                                 CarBallTouchState &touch_state)
 {
-    (void)engine;
-    (void)ball_gs;
-
-    Vector3 dx = vel.linear * consts::deltaT;
-    pos += dx;
-
-    // Check collision against the long walls
-    for (int i = 0; i < 2; ++i) {
-        WallPlane &plane = engine.data().arena.wallPlanes[i];
-
-        float min_overlap;
-        if (intersectSphereWall(Sphere{pos, consts::ballRadius}, 
-                    plane, min_overlap)) {
-            Vector3 normal_3d = Vector3{plane.normal.x, plane.normal.y, 0.f};
-
-#if 0
-            pos += normal_3d * min_overlap;
-            vel.linear = reflect(vel.linear, normal_3d);
-#endif
-
-            CollisionData collision = {
-                .a = e,
-                .b = Entity::none(),
-                .overlap = normal_3d * min_overlap,
-                .diff = reflect(vel.linear, normal_3d),
-            };
-
-            Loc loc = engine.makeTemporary<Collision>();
-            engine.get<CollisionData>(loc) = collision;
-        }
-    }
-
-    // Check collision against the goal posts
-    for (int i = 0; i < 2; ++i) {
-        checkBallGoalPosts(engine, e, pos, vel, ball_gs, i);
-    }
-
-#if 0
-    vel.linear *= 0.95f;
-#endif
-}
-
-inline void collisionResolveSystem(Engine &engine,
-                                   WorldReset)
-{
-    auto resolve_collision = [&engine](CollisionData &data) {
-        if (data.b == Entity::none()) {
-            if (engine.get<DynamicEntityType>(data.a) == DynamicEntityType::Car) {
-                // A is a car and B is a wall
-                engine.get<Position>(data.a) -= data.overlap;
-            } else {
-                // A is a ball and B is a wall
-                engine.get<Position>(data.a) += data.overlap;
-                engine.get<Velocity>(data.a).linear = data.diff;
-            }
-        } else if (engine.get<DynamicEntityType>(data.a) == 
-                DynamicEntityType::Ball) {
-            // A is a ball, B is a car
-            engine.get<Velocity>(data.a).linear += data.diff * 10.f;
-            engine.get<Position>(data.a) += data.overlap;
-        } else {
-            // A is a car, B is a car
-            engine.get<Position>(data.a) -= data.diff;
-            engine.get<Velocity>(data.a).linear -= data.diff / consts::deltaT;
-
-            engine.get<Position>(data.b) += data.diff;
-            engine.get<Velocity>(data.b).linear += data.diff / consts::deltaT;
-        }
-    };
-
-    engine.iterateQuery(engine.data().collisionQuery, resolve_collision);
-}
-
-inline void velocityCorrectSystem(Engine &engine,
-                                  DynamicEntityType type,
-                                  Velocity &vel)
-{
-    (void)engine;
-
-    // Friction hack
-    if (type == DynamicEntityType::Ball) {
-        vel.linear *= 0.99f;
-    } else {
-        vel.linear *= 0.9f;
-    }
+    // FIXME
+    touch_state.touched = false;
 }
 
 static inline float angleObs(float v) { return v / math::pi; }
@@ -634,7 +371,6 @@ inline void updateResultsSystem(Engine &ctx,
 
 inline void individualRewardSystem(
     Engine &ctx,
-    Entity e,
     CarPolicy car_policy,
     Position pos,
     Rotation rot,
@@ -917,51 +653,42 @@ static TaskGraphNodeID gameplayAndRewardsTasks(TaskGraphBuilder &builder,
     // Turn policy actions into movement
     auto move_sys = builder.addToGraph<ParallelForNode<Engine,
         carMovementSystem,
-            Entity,
             Action,
-            Position,
             Rotation,
-            Velocity,
-            CarBallTouchState
+            ExternalForce,
+            ExternalTorque
         >>({match_info_sys});
 
-    auto ball_move_sys = builder.addToGraph<ParallelForNode<Engine,
-        ballMovementSystem,
-            Entity,
+    // Build BVH for broadphase
+    auto broadphase_setup_sys =
+        phys::RigidBodyPhysicsSystem::setupBroadphaseTasks(builder, 
+                                                           {move_sys});
+
+    auto substep_sys = phys::RigidBodyPhysicsSystem::setupSubstepTasks(builder,
+        {broadphase_setup_sys}, consts::numPhysicsSubsteps);
+
+    auto phys_done = phys::RigidBodyPhysicsSystem::setupCleanupTasks(
+        builder, {substep_sys});
+
+    auto check_goal_sys = builder.addToGraph<ParallelForNode<Engine,
+        checkGoalSystem,
             Position,
-            Velocity,
             BallGoalState
-        >>({move_sys});
+        >>({phys_done});
 
-    auto post_collisions = ball_move_sys;
-
-#ifdef MADRONA_GPU_MODE
-    auto sort_collisions = queueSortByWorld<Collision>(builder, {ball_move_sys});
-    post_collisions = sort_collisions;
-#endif
-
-    auto collision_resolve = builder.addToGraph<ParallelForNode<Engine,
-         collisionResolveSystem,
-            WorldReset
-        >>({post_collisions});
-
-    auto clear_colisions = builder.addToGraph<ClearTmpNode<Collision>>(
-        {collision_resolve});
-
-    auto velocity_correct_system = builder.addToGraph<ParallelForNode<Engine,
-         velocityCorrectSystem,
-            DynamicEntityType,
-            Velocity
-        >>({clear_colisions});
+    auto check_ball_touch_sys = builder.addToGraph<ParallelForNode<Engine,
+        checkBallTouchSystem,
+            Position,
+            CarBallTouchState
+        >>({phys_done});
 
     auto update_results_sys = builder.addToGraph<ParallelForNode<Engine,
         updateResultsSystem,
             EpisodeResult
-        >>({velocity_correct_system});
+        >>({check_goal_sys, check_ball_touch_sys});
 
     auto individual_reward_sys = builder.addToGraph<ParallelForNode<Engine,
         individualRewardSystem,
-            Entity,
             CarPolicy,
             Position,
             Rotation,
@@ -1085,7 +812,12 @@ Sim::Sim(Engine &ctx,
     : WorldBase(ctx)
 {
     constexpr CountT max_total_entities =
-        5 + consts::numTeams * consts::numCarsPerTeam;
+        consts::numTeams * consts::numCarsPerTeam // cars
+        + 1 // Ball
+        + 2 // Side walls
+        + 4 // Back walls
+        + 1 // floor
+    ;
 
     ctx.singleton<SimFlags>() = cfg.flags;
 
@@ -1109,12 +841,6 @@ Sim::Sim(Engine &ctx,
 
     // Creates agents, walls, etc.
     createPersistentEntities(ctx);
-
-    // Generate initial world state
-    initWorld(ctx);
-
-    collisionQuery = ctx.query<CollisionData>();
-
     ctx.singleton<WorldReset>().reset = 1;
 }
 

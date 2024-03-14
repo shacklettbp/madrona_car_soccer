@@ -28,7 +28,6 @@ static inline void setupRigidBodyEntity(
     Vector3 pos,
     Quat rot,
     SimObject sim_obj,
-    EntityType entity_type,
     ResponseType response_type = ResponseType::Dynamic,
     Diag3x3 scale = {1, 1, 1})
 {
@@ -45,7 +44,6 @@ static inline void setupRigidBodyEntity(
     ctx.get<ResponseType>(e) = response_type;
     ctx.get<ExternalForce>(e) = Vector3::zero();
     ctx.get<ExternalTorque>(e) = Vector3::zero();
-    ctx.get<EntityType>(e) = entity_type;
 }
 
 // Register the entity with the broadphase system
@@ -84,7 +82,6 @@ static Goal makeGoal(Engine &ctx,
         back_wall_right,
         Quat { 1, 0, 0, 0 },
         SimObject::Wall,
-        EntityType::Wall,
         ResponseType::Static,
         Diag3x3 {
             consts::worldWidth/3.f + consts::wallWidth * 2,
@@ -105,7 +102,6 @@ static Goal makeGoal(Engine &ctx,
         back_wall_left,
         Quat { 1, 0, 0, 0 },
         SimObject::Wall,
-        EntityType::Wall,
         ResponseType::Static,
         Diag3x3 {
             consts::worldWidth/3.f + consts::wallWidth * 2,
@@ -131,7 +127,6 @@ void createPersistentEntities(Engine &ctx)
         Vector3 { 0, 0, 0 },
         Quat { 1, 0, 0, 0 },
         SimObject::Plane,
-        EntityType::None, // Floor plane type should never be queried
         ResponseType::Static);
 
     // Create the outer wall entities
@@ -147,7 +142,6 @@ void createPersistentEntities(Engine &ctx)
         },
         Quat { 1, 0, 0, 0 },
         SimObject::Wall,
-        EntityType::Wall,
         ResponseType::Static,
         Diag3x3 {
             consts::wallWidth,
@@ -171,7 +165,6 @@ void createPersistentEntities(Engine &ctx)
         },
         Quat { 1, 0, 0, 0 },
         SimObject::Wall,
-        EntityType::Wall,
         ResponseType::Static,
         Diag3x3 {
             consts::wallWidth,
@@ -204,6 +197,9 @@ void createPersistentEntities(Engine &ctx)
             SimObject::AgentTeam0 : SimObject::AgentTeam1;
 
         Entity car = ctx.data().cars[i] = ctx.makeRenderableEntity<Car>();
+        setupRigidBodyEntity(ctx, car, Vector3::zero(), Quat { 1, 0, 0, 0 },
+                             team_obj, ResponseType::Dynamic,
+                             Diag3x3::fromVec(consts::agentDimensions));
 
         if (ctx.data().enableRender) {
             render::RenderingSystem::attachEntityToView(ctx,
@@ -212,23 +208,23 @@ void createPersistentEntities(Engine &ctx)
                     1.5f * math::up);
         }
 
-        ctx.get<Scale>(car) = Diag3x3::fromVec(consts::agentDimensions);
-        ctx.get<ObjectID>(car) = ObjectID { (int32_t)team_obj };
-        ctx.get<EntityType>(car) = EntityType::Agent;
         ctx.get<DynamicEntityType>(car) = DynamicEntityType::Car;
 
         // This needs to be initialized for the viewer, which won't pass
         // in a legitimate policyIdx.
         ctx.get<CarPolicy>(car).policyIdx = 0;
+
+        ctx.get<Action>(car) = { 
+            .moveAmount = consts::numMoveAmountBuckets / 2, 
+            .rotate = consts::numTurnBuckets / 2,
+        };
     }
 
-    Entity ball = ctx.data().ball =
-        ctx.makeRenderableEntity<Ball>();
+    Entity ball = ctx.data().ball = ctx.makeRenderableEntity<Ball>();
+    setupRigidBodyEntity(ctx, ball, Vector3::zero(), Quat { 1, 0, 0, 0 },
+        SimObject::Sphere, ResponseType::Dynamic,
+        { consts::ballRadius, consts::ballRadius, consts::ballRadius });
 
-    float ball_rad = consts::ballRadius;
-    ctx.get<Scale>(ball) = Diag3x3 { ball_rad, ball_rad, ball_rad };
-    ctx.get<ObjectID>(ball) = ObjectID { (int32_t)SimObject::Sphere };
-    ctx.get<EntityType>(ball) = EntityType::Ball;
     ctx.get<DynamicEntityType>(ball) = DynamicEntityType::Ball;
     ctx.get<BallGoalState>(ball).state = BallGoalState::State::NotInGoal;
 }
@@ -278,10 +274,6 @@ void placeEntities(Engine &ctx)
                 Vector3::zero(),
                 Vector3::zero(),
             };
-            ctx.get<Action>(car_entity) = Action {
-                .moveAmount = 1,
-                .rotate = 1,
-            };
             ctx.get<CarBallTouchState>(car_entity).touched = 0;
         }
     }
@@ -289,8 +281,7 @@ void placeEntities(Engine &ctx)
     Entity ball_entity = ctx.data().ball;
 
     ctx.get<Position>(ball_entity) = Vector3{ 0.f, 0.f, consts::ballRadius };
-    ctx.get<Rotation>(ball_entity) = 
-        Quat::angleAxis(0.0f, Vector3{0.f, 0.f, 1.f});
+    ctx.get<Rotation>(ball_entity) = Quat { 1, 0, 0, 0 };
     ctx.get<Velocity>(ball_entity) = {
         Vector3::zero(),
         Vector3::zero()
@@ -336,8 +327,13 @@ static void resetPersistentEntities(Engine &ctx)
 
             team.players[car_idx] = car_entity;
             ctx.get<TeamState>(car_entity).teamIdx = (int32_t)team_idx;
+
+            registerRigidBodyEntity(ctx, car_entity,
+                team_idx == 0 ? SimObject::AgentTeam0 : SimObject::AgentTeam1);
         }
     }
+
+    registerRigidBodyEntity(ctx, ctx.data().ball, SimObject::Sphere);
 
     placeEntities(ctx);
 }
