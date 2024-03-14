@@ -3,7 +3,6 @@ from jax import lax, random, numpy as jnp
 from jax.experimental import checkify
 import flax
 from flax import linen as nn
-from flax.metrics import tensorboard
 
 import argparse
 from functools import partial
@@ -18,6 +17,7 @@ from madrona_car_soccer import SimFlags
 import madrona_learn
 from madrona_learn import (
     TrainConfig, CustomMetricConfig, PPOConfig, PBTConfig, ParamExplore,
+    TensorboardWriter,
 )
 
 from jax_policy import make_policy
@@ -71,7 +71,7 @@ jax_gpu = jax.devices()[0].platform == 'gpu'
 
 sim_init, sim_step = sim.jax(jax_gpu)
 
-tb_writer = tensorboard.SummaryWriter(os.path.join(args.tb_dir, args.run_name))
+tb_writer = TensorboardWriter(os.path.join(args.tb_dir, args.run_name))
 
 def metrics_cb(metrics, epoch, mb, train_state):
     return metrics

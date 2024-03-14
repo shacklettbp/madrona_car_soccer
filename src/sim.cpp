@@ -1047,7 +1047,7 @@ static void setupInitTasks(TaskGraphBuilder &builder,
 #ifdef MADRONA_GPU_MODE
     // RecycleEntitiesNode is required on the GPU backend in order to reclaim
     // deleted entity IDs.
-    auto gpu_init = builder.addToGraph<RecycleEntitiesNode>({gpu_init});
+    auto gpu_init = builder.addToGraph<RecycleEntitiesNode>({});
 
     gpu_init = queueSortByWorld<Car>(builder, {gpu_init});
     gpu_init = queueSortByWorld<Ball>(builder, {gpu_init});
