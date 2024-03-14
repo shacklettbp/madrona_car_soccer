@@ -51,26 +51,98 @@ int main(int argc, char *argv[])
 {
     constexpr int64_t num_views = consts::numTeams * consts::numCarsPerTeam;
 
-    // Read command line arguments
     uint32_t num_worlds = 1;
-    if (argc >= 2) {
-        num_worlds = (uint32_t)atoi(argv[1]);
-    }
-
     ExecMode exec_mode = ExecMode::CPU;
-    if (argc >= 3) {
-        if (!strcmp("--cpu", argv[2])) {
-            exec_mode = ExecMode::CPU;
-        } else if (!strcmp("--cuda", argv[2])) {
-            exec_mode = ExecMode::CUDA;
+
+    auto usageErr = [argv]() {
+        fprintf(stderr, "%s [NUM_WORLDS] [--backend cpu|cuda] [--record path] [--replay path] [--load-ckpt path] [--print-obs]\n", argv[0]);
+        exit(EXIT_FAILURE);
+    };
+
+    bool num_worlds_set = false;
+
+    char *record_log_path = nullptr;
+    char *replay_log_path = nullptr;
+    char *load_ckpt_path = nullptr;
+    bool start_frozen = false;
+    bool print_obs = false;
+
+    for (int i = 1; i < argc; i++) {
+        char *arg = argv[i];
+
+        if (arg[0] == '-' && arg[1] == '-') {
+            arg += 2;
+
+            if (!strcmp("backend", arg)) {
+                i += 1;
+
+                if (i == argc) {
+                    usageErr();
+                }
+
+                char *value = argv[i];
+                if (!strcmp("cpu", value)) {
+                    exec_mode = ExecMode::CPU;
+                } else if (!strcmp("cuda", value)) {
+                    exec_mode = ExecMode::CUDA;
+                } else {
+                    usageErr();
+                }
+            } else if (!strcmp("record", arg)) {
+                if (record_log_path != nullptr) {
+                    usageErr();
+                }
+
+                i += 1;
+
+                if (i == argc) {
+                    usageErr();
+                }
+
+                record_log_path = argv[i];
+            } else if (!strcmp("replay", arg)) {
+                if (replay_log_path != nullptr) {
+                    usageErr();
+                }
+
+                i += 1;
+
+                if (i == argc) {
+                    usageErr();
+                }
+
+                replay_log_path = argv[i];
+            } else if (!strcmp("load-ckpt", arg)) {
+                if (load_ckpt_path != nullptr) {
+                    usageErr();
+                }
+
+                i += 1;
+
+                if (i == argc) {
+                    usageErr();
+                }
+
+                load_ckpt_path = argv[i];
+            } else if (!strcmp("freeze", arg)) {
+                start_frozen = true;
+            } else if (!strcmp("print-obs", arg)) {
+                print_obs = true;
+            } else {
+                usageErr();
+            }
+        } else {
+            if (num_worlds_set) {
+                usageErr();
+            }
+
+            num_worlds_set = true;
+
+            num_worlds = (uint32_t)atoi(arg);
         }
     }
 
-    // Setup replay log
-    const char *replay_log_path = nullptr;
-    if (argc >= 4) {
-        replay_log_path = argv[3];
-    }
+    (void)record_log_path;
 
     auto replay_log = Optional<HeapArray<Checkpoint>>::none();
     CountT cur_replay_step = 0;
@@ -121,7 +193,7 @@ int main(int argc, char *argv[])
     // Create the viewer viewer
     viz::Viewer viewer(mgr.getRenderManager(), window.get(), {
         .numWorlds = num_worlds,
-        .simTickRate = 20,
+        .simTickRate = start_frozen ? 0_u32 : 20_u32,
         .cameraMoveSpeed = camera_move_speed,
         .cameraPosition = initial_camera_position,
         .cameraRotation = initial_camera_rotation,
@@ -197,6 +269,10 @@ int main(int argc, char *argv[])
     };
 
     auto printObs = [&]() {
+        if (!print_obs) {
+            return;
+        }
+
         printf("Self\n");
         self_printer.print();
 
@@ -286,7 +362,7 @@ int main(int argc, char *argv[])
 
         mgr.step();
 
-        //printObs();
+        printObs();
     }, [&]() {
         CountT cur_world_id = viewer.getCurrentWorldID();
         CountT agent_world_offset = cur_world_id * num_views;

@@ -118,7 +118,8 @@ struct Manager::Impl {
 
     inline virtual ~Impl() {}
 
-    virtual void run() = 0;
+    virtual void init() = 0;
+    virtual void step() = 0;
 
 #ifdef MADRONA_CUDA_SUPPORT
     virtual void gpuStreamInit(cudaStream_t strm, void **buffers, Manager &) = 0;
@@ -131,7 +132,7 @@ struct Manager::Impl {
 
     virtual Tensor rewardHyperParamsTensor() const = 0;
 
-    static inline Impl * init(const Config &cfg);
+    static inline Impl * make(const Config &cfg);
 };
 
 struct Manager::CPUImpl final : Manager::Impl {
@@ -161,9 +162,14 @@ struct Manager::CPUImpl final : Manager::Impl {
         free(rewardHyperParams);
     }
 
-    inline virtual void run()
+    inline virtual void init()
     {
-        cpuExec.run();
+        cpuExec.runTaskGraph(TaskGraphID::Init);
+    }
+
+    inline virtual void step()
+    {
+        cpuExec.runTaskGraph(TaskGraphID::Step);
     }
 
 #ifdef MADRONA_CUDA_SUPPORT
@@ -199,6 +205,7 @@ struct Manager::CPUImpl final : Manager::Impl {
 #ifdef MADRONA_CUDA_SUPPORT
 struct Manager::CUDAImpl final : Manager::Impl {
     MWCudaExecutor gpuExec;
+    MWCudaLaunchGraph stepGraph;
     RewardHyperParams *rewardHyperParams;
     RandKey staggerShuffleRND;
 
@@ -215,6 +222,7 @@ struct Manager::CUDAImpl final : Manager::Impl {
                reset_buffer, action_buffer,
                std::move(render_gpu_state), std::move(render_mgr)),
           gpuExec(std::move(gpu_exec)),
+          stepGraph(gpuExec.buildLaunchGraph(TaskGraphID::Step)),
           rewardHyperParams(reward_hyper_params),
           staggerShuffleRND(stagger_shuffle_key)
     {}
@@ -224,9 +232,15 @@ struct Manager::CUDAImpl final : Manager::Impl {
         REQ_CUDA(cudaFree(rewardHyperParams));
     }
 
-    inline virtual void run()
+    inline virtual void init()
     {
-        gpuExec.run();
+        auto init_graph = gpuExec.buildLaunchGraph(TaskGraphID::Init);
+        gpuExec.run(init_graph);
+    }
+
+    inline virtual void step()
+    {
+        gpuExec.run(stepGraph);
     }
 
 #ifdef MADRONA_CUDA_SUPPORT
@@ -257,24 +271,28 @@ struct Manager::CUDAImpl final : Manager::Impl {
     {
         printf("Simulator stream init\n");
 
-        HeapArray<WorldReset> resets_staging(cfg.numWorlds);
-        for (CountT i = 0; i < (CountT)cfg.numWorlds; i++) {
-            resets_staging[i].reset = 1;
-        }
-
-        auto resetSyncStep = [&]()
         {
-            cudaMemcpyAsync(worldResetBuffer, resets_staging.data(),
-                       sizeof(WorldReset) * cfg.numWorlds,
-                       cudaMemcpyHostToDevice, strm);
-            gpuExec.runAsync(strm);
+            auto init_graph = gpuExec.buildLaunchGraph(TaskGraphID::Init);
+            gpuExec.runAsync(init_graph, strm);
             REQ_CUDA(cudaStreamSynchronize(strm));
-        };
-
-        resetSyncStep();
+        }
 
         if ((cfg.simFlags & SimFlags::StaggerStarts) ==
                 SimFlags::StaggerStarts) {
+            HeapArray<WorldReset> resets_staging(cfg.numWorlds);
+            for (CountT i = 0; i < (CountT)cfg.numWorlds; i++) {
+                resets_staging[i].reset = 1;
+            }
+
+            auto resetSyncStep = [&]()
+            {
+                cudaMemcpyAsync(worldResetBuffer, resets_staging.data(),
+                           sizeof(WorldReset) * cfg.numWorlds,
+                           cudaMemcpyHostToDevice, strm);
+                gpuExec.runAsync(stepGraph, strm);
+                REQ_CUDA(cudaStreamSynchronize(strm));
+            };
+
             HeapArray<int32_t> steps_before_reset(cfg.numWorlds);
 
             CountT cur_world_idx = 0;
@@ -351,7 +369,7 @@ struct Manager::CUDAImpl final : Manager::Impl {
             copyToSim(mgr.rewardHyperParamsTensor(), *buffers++);
         }
 
-        gpuExec.runAsync(strm);
+        gpuExec.runAsync(stepGraph, strm);
 
         buffers = copyOutObservations(strm, buffers, mgr);
 
@@ -607,7 +625,7 @@ static void loadPhysicsObjects(PhysicsLoader &loader)
     free(rigid_body_data);
 }
 
-Manager::Impl * Manager::Impl::init(
+Manager::Impl * Manager::Impl::make(
     const Manager::Config &mgr_cfg)
 {
     RandKey init_key = rand::initKey(mgr_cfg.randSeed);
@@ -674,6 +692,7 @@ Manager::Impl * Manager::Impl::init(
             .numWorldDataBytes = sizeof(Sim),
             .worldDataAlignment = alignof(Sim),
             .numWorlds = mgr_cfg.numWorlds,
+            .numTaskGraphs = (uint32_t)TaskGraphID::NumTaskGraphs,
             .numExportedBuffers = (uint32_t)ExportID::NumExports, 
         }, {
             { GPU_HIDESEEK_SRC_LIST },
@@ -745,6 +764,7 @@ Manager::Impl * Manager::Impl::init(
             },
             sim_cfg,
             world_inits.data(),
+            (uint32_t)TaskGraphID::NumTaskGraphs,
         };
 
         WorldReset *world_reset_buffer = 
@@ -771,38 +791,32 @@ Manager::Impl * Manager::Impl::init(
 }
 
 Manager::Manager(const Config &cfg)
-    : impl_(Impl::init(cfg))
-{
-}
+    : impl_(Impl::make(cfg))
+{}
 
 Manager::~Manager() {}
 
 void Manager::init()
 {
-    // Currently, there is no way to populate the initial set of observations
-    // without stepping the simulations in order to execute the taskgraph.
-    // Therefore, after setup, we step all the simulations with a forced reset
-    // that ensures the first real step will have valid observations at the
-    // start of a fresh episode in order to compute actions.
-    //
-    // This will be improved in the future with support for multiple task
-    // graphs, allowing a small task graph to be executed after initialization.
-    
-    for (int32_t i = 0; i < (int32_t)impl_->cfg.numWorlds; i++) {
-        triggerReset(i);
-    }
-
-    step();
+    impl_->init();
 
     if ((impl_->cfg.simFlags & SimFlags::StaggerStarts) ==
             SimFlags::StaggerStarts) {
         assert(false);
     }
+
+    if (impl_->renderMgr.has_value()) {
+        impl_->renderMgr->readECS();
+    }
+
+    if (impl_->cfg.enableBatchRenderer) {
+        impl_->renderMgr->batchRender();
+    }
 }
 
 void Manager::step()
 {
-    impl_->run();
+    impl_->step();
 
     if (impl_->renderMgr.has_value()) {
         impl_->renderMgr->readECS();

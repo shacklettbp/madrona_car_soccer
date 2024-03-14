@@ -903,13 +903,16 @@ TaskGraph::NodeID queueSortByWorld(TaskGraph::Builder &builder,
 }
 #endif
 
-// Build the task graph
-void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
+static TaskGraphNodeID gameplayAndRewardsTasks(TaskGraphBuilder &builder,
+                                               const Sim::Config &cfg,
+                                               Span<const TaskGraphNodeID> deps)
 {
+    (void)cfg;
+
     auto match_info_sys = builder.addToGraph<ParallelForNode<Engine,
         matchInfoSystem,
             MatchInfo
-        >>({});
+        >>(deps);
 
     // Turn policy actions into movement
     auto move_sys = builder.addToGraph<ParallelForNode<Engine,
@@ -985,11 +988,20 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             Done
         >>({final_reward_sys});
 
+    return done_sys;
+}
+
+static TaskGraphNodeID resetTasks(TaskGraphBuilder &builder,
+                                  const Sim::Config &cfg,
+                                  Span<const TaskGraphNodeID> deps)
+{
+    (void)cfg;
+
     // Conditionally reset the world if the episode is over
     auto reset_sys = builder.addToGraph<ParallelForNode<Engine,
         resetSystem,
             WorldReset
-        >>({done_sys});
+        >>(deps);
 
     auto load_ckpt_sys = builder.addToGraph<ParallelForNode<Engine,
         loadCheckpointSystem,
@@ -1000,9 +1012,15 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
         checkpointSystem,
             Checkpoint
         >>({load_ckpt_sys});
-    (void)ckpt_sys;
 
-    auto car_obs_system = builder.addToGraph<ParallelForNode<Engine,
+    return ckpt_sys;
+}
+
+static void obsTasks(TaskGraphBuilder &builder,
+                     const Sim::Config &cfg,
+                     Span<const TaskGraphNodeID> deps)
+{
+    builder.addToGraph<ParallelForNode<Engine,
          collectCarObservationSystem,
             Entity,
             Position,
@@ -1016,26 +1034,49 @@ void Sim::setupTasks(TaskGraphBuilder &builder, const Config &cfg)
             BallObservation,
             StepsRemainingObservation,
             TeamState
-        >>({load_ckpt_sys});
+        >>(deps);
 
     if (cfg.renderBridge) {
-        RenderingSystem::setupTasks(builder, {reset_sys});
+        RenderingSystem::setupTasks(builder, deps);
     }
+}
 
-    auto cleanup_start = car_obs_system;
-
-    auto cleanup = builder.addToGraph<ResetTmpAllocNode>({cleanup_start});
+static void setupInitTasks(TaskGraphBuilder &builder,
+                           const Sim::Config &cfg)
+{
 #ifdef MADRONA_GPU_MODE
     // RecycleEntitiesNode is required on the GPU backend in order to reclaim
     // deleted entity IDs.
-    cleanup = builder.addToGraph<RecycleEntitiesNode>({cleanup});
+    auto gpu_init = builder.addToGraph<RecycleEntitiesNode>({gpu_init});
 
-    cleanup = queueSortByWorld<Car>(builder, {cleanup});
-    cleanup = queueSortByWorld<Ball>(builder, {cleanup});
-    cleanup = queueSortByWorld<PhysicsEntity>(builder, {cleanup});
-#else
-    (void)cleanup;
+    gpu_init = queueSortByWorld<Car>(builder, {gpu_init});
+    gpu_init = queueSortByWorld<Ball>(builder, {gpu_init});
+    gpu_init = queueSortByWorld<PhysicsEntity>(builder, {gpu_init});
 #endif
+
+    auto reset = resetTasks(builder, cfg, {
+#ifdef MADRONA_GPU_MODE
+        gpu_init
+#endif
+    });
+
+    obsTasks(builder, cfg, {reset});
+}
+
+static void setupStepTasks(TaskGraphBuilder &builder,
+                           const Sim::Config &cfg)
+{
+    auto gameplay = gameplayAndRewardsTasks(builder, cfg, {});
+    auto reset = resetTasks(builder, cfg, {gameplay});
+    obsTasks(builder, cfg, {reset});
+}
+
+// Build the task graph
+void Sim::setupTasks(TaskGraphManager &taskgraph_mgr,
+                     const Sim::Config &cfg)
+{
+    setupInitTasks(taskgraph_mgr.init(TaskGraphID::Init), cfg);
+    setupStepTasks(taskgraph_mgr.init(TaskGraphID::Step), cfg);
 }
 
 Sim::Sim(Engine &ctx,
@@ -1043,12 +1084,8 @@ Sim::Sim(Engine &ctx,
          const WorldInit &)
     : WorldBase(ctx)
 {
-    // Currently the physics system needs an upper bound on the number of
-    // entities that will be stored in the BVH. We plan to fix this in
-    // a future release.
-    constexpr CountT max_total_entities = consts::numAgents +
-        consts::numRooms * (consts::maxEntitiesPerRoom + 3) +
-        4; // side walls + floor
+    constexpr CountT max_total_entities =
+        5 + consts::numTeams * consts::numCarsPerTeam;
 
     ctx.singleton<SimFlags>() = cfg.flags;
 
@@ -1077,6 +1114,8 @@ Sim::Sim(Engine &ctx,
     initWorld(ctx);
 
     collisionQuery = ctx.query<CollisionData>();
+
+    ctx.singleton<WorldReset>().reset = 1;
 }
 
 // This declaration is needed for the GPU backend in order to generate the

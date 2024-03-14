@@ -32,6 +32,12 @@ enum class ExportID : uint32_t {
     NumExports,
 };
 
+enum class TaskGraphID : uint32_t {
+    Init,
+    Step,
+    NumTaskGraphs,
+};
+
 // Stores values for the ObjectID component that links entities to
 // render / physics assets.
 enum class SimObject : uint32_t {
@@ -75,7 +81,7 @@ struct Sim : public madrona::WorldBase {
     // Sim::setupTasks is called during initialization to build
     // the system task graph that will be invoked by the 
     // Manager class (src/mgr.hpp) for each step.
-    static void setupTasks(madrona::TaskGraphBuilder &builder,
+    static void setupTasks(madrona::TaskGraphManager &taskgraph_mgr,
                            const Config &cfg);
 
     // The constructor is called for each world during initialization.
