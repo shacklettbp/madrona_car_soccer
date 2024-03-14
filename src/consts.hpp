@@ -46,10 +46,7 @@ inline constexpr float carAcceleration = 80.f;
 
 inline constexpr float ballRadius = 0.7f;
 
-// Half width, length, height
-inline constexpr madrona::math::Vector3 agentDimensions
-    { 0.8f, 1.7f, 0.7f };
-
+inline constexpr float agentHeight = 0.7f;
 
 }
 }

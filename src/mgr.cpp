@@ -412,9 +412,9 @@ static void loadRenderObjects(render::RenderManager &render_mgr,
 {
     std::array<std::string, (size_t)SimObject::NumObjects> render_asset_paths;
     render_asset_paths[(size_t)SimObject::AgentTeam0] =
-        (std::filesystem::path(DATA_DIR) / "cube_render.obj").string();
+        (std::filesystem::path(DATA_DIR) / "car_render.obj").string();
     render_asset_paths[(size_t)SimObject::AgentTeam1] =
-        (std::filesystem::path(DATA_DIR) / "cube_render.obj").string();
+        (std::filesystem::path(DATA_DIR) / "car_render.obj").string();
 
     render_asset_paths[(size_t)SimObject::Wall] =
         (std::filesystem::path(DATA_DIR) / "wall_render.obj").string();

@@ -7,12 +7,6 @@ using namespace madrona;
 using namespace madrona::math;
 using namespace madrona::phys;
 
-namespace consts {
-
-inline constexpr float doorWidth = consts::worldWidth / 3.f;
-
-}
-
 enum class RoomType : uint32_t {
     SingleButton,
     DoubleButton,
@@ -110,7 +104,7 @@ static Goal makeGoal(Engine &ctx,
         });
 
     Vector3 goal_center = (back_wall_left + back_wall_right) / 2.f;
-    goal.centerPosition = goal_center + consts::agentDimensions.z;
+    goal.centerPosition = goal_center + consts::agentHeight;
 
     return goal;
 }
@@ -198,8 +192,7 @@ void createPersistentEntities(Engine &ctx)
 
         Entity car = ctx.data().cars[i] = ctx.makeRenderableEntity<Car>();
         setupRigidBodyEntity(ctx, car, Vector3::zero(), Quat { 1, 0, 0, 0 },
-                             team_obj, ResponseType::Dynamic,
-                             Diag3x3::fromVec(consts::agentDimensions));
+                             team_obj, ResponseType::Dynamic);
 
         if (ctx.data().enableRender) {
             render::RenderingSystem::attachEntityToView(ctx,
@@ -239,7 +232,7 @@ void placeEntities(Engine &ctx)
             Entity car_entity = team.players[car_idx];
 
             // Place the agents near the starting wall
-            Vector3 pos { 0.f, 0.f, consts::agentDimensions.z };
+            Vector3 pos { 0.f, 0.f, consts::agentHeight };
             Quat rot{};
 
             if (goal_idx == 0) {
