@@ -543,8 +543,8 @@ static void loadPhysicsObjects(PhysicsLoader &loader)
     });
 
     setupHull(SimObject::Sphere, 1.f, {
-        .muS = 0.5f,
-        .muD = 0.5f,
+        .muS = 0.01f,
+        .muD = 0.01f,
     });
 
     SourceCollisionPrimitive plane_prim {
