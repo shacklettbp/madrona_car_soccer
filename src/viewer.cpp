@@ -394,8 +394,7 @@ int main(int argc, char *argv[])
         my_goal_obs_ptr += agent_world_offset;
         enemy_goal_obs_ptr += agent_world_offset;
         reward_ptr += agent_world_offset;
-
-        ball_obs_ptr += cur_world_id;
+        ball_obs_ptr += agent_world_offset;
 
         if (exec_mode == ExecMode::CUDA) {
 #ifdef MADRONA_CUDA_SUPPORT

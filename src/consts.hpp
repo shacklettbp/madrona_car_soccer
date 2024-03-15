@@ -40,7 +40,7 @@ inline constexpr madrona::CountT numLidarSamples = 30;
 inline constexpr float deltaT = 0.05f;
 
 // Number of physics substeps
-inline constexpr madrona::CountT numPhysicsSubsteps = 4;
+inline constexpr madrona::CountT numPhysicsSubsteps = 32;
 
 inline constexpr float carAcceleration = 80.f;
 
