@@ -2,6 +2,7 @@
 
 #include "madrona/math.hpp"
 #include <madrona/types.hpp>
+#include <madrona/physics.hpp>
 
 namespace madEscape {
 namespace consts {
@@ -47,6 +48,9 @@ inline constexpr float carAcceleration = 80.f;
 inline constexpr float ballRadius = 0.7f;
 
 inline constexpr float agentHeight = 0.7f;
+
+inline constexpr auto solverSelector =
+    madrona::phys::PhysicsSystem::Solver::XPBD;
 
 }
 }

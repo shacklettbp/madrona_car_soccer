@@ -51,7 +51,7 @@ static void registerRigidBodyEntity(
 {
     ObjectID obj_id { (int32_t)sim_obj };
     ctx.get<broadphase::LeafID>(e) =
-        RigidBodyPhysicsSystem::registerEntity(ctx, e, obj_id);
+        PhysicsSystem::registerEntity(ctx, e, obj_id);
 }
 
 // idx = 0 => Front

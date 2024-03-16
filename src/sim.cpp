@@ -8,8 +8,6 @@ using namespace madrona;
 using namespace madrona::math;
 using namespace madrona::phys;
 
-namespace RenderingSystem = madrona::render::RenderingSystem;
-
 namespace madEscape {
 
 // Register all the ECS components and archetypes that will be
@@ -17,7 +15,7 @@ namespace madEscape {
 void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
 {
     base::registerTypes(registry);
-    phys::RigidBodyPhysicsSystem::registerTypes(registry);
+    PhysicsSystem::registerTypes(registry, consts::solverSelector);
 
     RenderingSystem::registerTypes(registry, cfg.renderBridge);
 
@@ -86,7 +84,7 @@ void Sim::registerTypes(ECSRegistry &registry, const Config &cfg)
 
 static inline void initWorld(Engine &ctx)
 {
-    phys::RigidBodyPhysicsSystem::reset(ctx);
+    PhysicsSystem::reset(ctx);
 
     // Assign a new episode ID
     ctx.data().rng = RNG(rand::split_i(ctx.data().initRandKey,
@@ -661,13 +659,14 @@ static TaskGraphNodeID gameplayAndRewardsTasks(TaskGraphBuilder &builder,
 
     // Build BVH for broadphase
     auto broadphase_setup_sys =
-        phys::RigidBodyPhysicsSystem::setupBroadphaseTasks(builder, 
+        PhysicsSystem::setupBroadphaseTasks(builder, 
                                                            {move_sys});
 
-    auto substep_sys = phys::RigidBodyPhysicsSystem::setupSubstepTasks(builder,
-        {broadphase_setup_sys}, consts::numPhysicsSubsteps);
+    auto substep_sys = PhysicsSystem::setupPhysicsStepTasks(
+        builder, {broadphase_setup_sys}, consts::numPhysicsSubsteps,
+        consts::solverSelector);
 
-    auto phys_done = phys::RigidBodyPhysicsSystem::setupCleanupTasks(
+    auto phys_done = PhysicsSystem::setupCleanupTasks(
         builder, {substep_sys});
 
     auto check_goal_sys = builder.addToGraph<ParallelForNode<Engine,
@@ -823,9 +822,9 @@ Sim::Sim(Engine &ctx,
 
     ctx.singleton<LoadCheckpoint>().load = 0;
 
-    phys::RigidBodyPhysicsSystem::init(ctx, cfg.rigidBodyObjMgr,
+    PhysicsSystem::init(ctx, cfg.rigidBodyObjMgr,
         consts::deltaT, consts::numPhysicsSubsteps, -9.8f * math::up,
-        max_total_entities);
+        max_total_entities, consts::solverSelector);
 
     initRandKey = cfg.initRandKey;
     autoReset = cfg.autoReset;

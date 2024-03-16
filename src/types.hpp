@@ -27,6 +27,12 @@ using madrona::phys::ExternalTorque;
 using madrona::math::Vector3;
 using madrona::math::Quat;
 using madrona::math::Diag3x3;
+using madrona::phys::RigidBody;
+using madrona::render::RenderCamera;
+using madrona::render::Renderable;
+
+namespace PhysicsSystem = madrona::phys::PhysicsSystem;
+namespace RenderingSystem = madrona::render::RenderingSystem;
 
 // WorldReset is a per-world singleton component that causes the current
 // episode to be terminated and the world regenerated
@@ -237,37 +243,15 @@ struct Checkpoint {
 };
 
 struct Ball : public madrona::Archetype<
-    Position, 
-    Rotation,
-    Scale,
-    Velocity,
-    ObjectID,
-    ResponseType,
-    madrona::phys::xpbd::SubstepPrevState,
-    madrona::phys::xpbd::PreSolvePositional,
-    madrona::phys::xpbd::PreSolveVelocity,
-    ExternalForce,
-    ExternalTorque,
-    madrona::phys::broadphase::LeafID,
+    RigidBody,
 
     BallGoalState,
     DynamicEntityType,
-    madrona::render::Renderable
+    Renderable
 > {};
 
 struct Car : public madrona::Archetype<
-    Position, 
-    Rotation,
-    Scale,
-    Velocity,
-    ObjectID,
-    ResponseType,
-    madrona::phys::xpbd::SubstepPrevState,
-    madrona::phys::xpbd::PreSolvePositional,
-    madrona::phys::xpbd::PreSolveVelocity,
-    ExternalForce,
-    ExternalTorque,
-    madrona::phys::broadphase::LeafID,
+    RigidBody,
 
     Action,
     Done,
@@ -287,27 +271,16 @@ struct Car : public madrona::Archetype<
     StepsRemainingObservation,
     Reward,
 
-    madrona::render::RenderCamera,
-    madrona::render::Renderable
+    RenderCamera,
+    Renderable
 > {};
 
 // Generic archetype for entities that need physics but don't have custom
 // logic associated with them.
 struct PhysicsEntity : public madrona::Archetype<
-    Position, 
-    Rotation,
-    Scale,
-    Velocity,
-    ObjectID,
-    ResponseType,
-    madrona::phys::xpbd::SubstepPrevState,
-    madrona::phys::xpbd::PreSolvePositional,
-    madrona::phys::xpbd::PreSolveVelocity,
-    ExternalForce,
-    ExternalTorque,
-    madrona::phys::broadphase::LeafID,
+    RigidBody,
 
-    madrona::render::Renderable
+    Renderable
 > {};
 
 struct Team {
