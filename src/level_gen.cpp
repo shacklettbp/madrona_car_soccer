@@ -142,10 +142,6 @@ void createPersistentEntities(Engine &ctx)
             consts::worldLength,
             consts::wallHeight
         });
-    ctx.data().arena.wallPlanes[0] = {
-        Vector2{ consts::worldWidth/2.f, 0.0f },
-        Vector2{ -1.0f, 0.0f }
-    };
 
     // Left
     ctx.data().arena.longBorders[1] = ctx.makeRenderableEntity<PhysicsEntity>();
@@ -165,20 +161,6 @@ void createPersistentEntities(Engine &ctx)
             consts::worldLength,
             consts::wallHeight
         });
-    ctx.data().arena.wallPlanes[1] = {
-        Vector2{ -consts::worldWidth/2.f, 0.0f },
-        Vector2{ 1.0f, 0.0f }
-    };
-
-    // Create the wall planes for the goals
-    ctx.data().arena.wallPlanes[2] = {
-        Vector2{ 0.0f, consts::worldLength/2.f },
-        Vector2{ 0.0f, -1.0f }
-    };
-    ctx.data().arena.wallPlanes[3] = {
-        Vector2{ 0.0f, -consts::worldLength/2.f },
-        Vector2{ 0.0f, 1.0f }
-    };
 
     ctx.data().arena.goals[0] = makeGoal(ctx, 0);
     ctx.data().arena.goals[1] = makeGoal(ctx, 1);

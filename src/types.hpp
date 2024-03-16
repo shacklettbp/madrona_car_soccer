@@ -3,11 +3,9 @@
 #include <madrona/components.hpp>
 #include <madrona/math.hpp>
 #include <madrona/rand.hpp>
-#include <madrona/physics.hpp>
 #include <madrona/render/ecs.hpp>
 
 #include "consts.hpp"
-#include "physics.hpp"
 #include "sim_flags.hpp"
 
 namespace madEscape {
@@ -178,8 +176,6 @@ struct Arena {
 
     // Across the length of the arena
     Entity longBorders[2];
-
-    WallPlane wallPlanes[4];
 };
 
 struct TeamState {

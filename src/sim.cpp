@@ -1,7 +1,6 @@
 #include <madrona/mw_gpu_entry.hpp>
 
 #include "sim.hpp"
-#include "physics.hpp"
 #include "level_gen.hpp"
 
 using namespace madrona;
