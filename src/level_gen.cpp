@@ -197,7 +197,7 @@ void createPersistentEntities(Engine &ctx)
 
     Entity ball = ctx.data().ball = ctx.makeRenderableEntity<Ball>();
     setupRigidBodyEntity(ctx, ball, Vector3::zero(), Quat { 1, 0, 0, 0 },
-        SimObject::Sphere, ResponseType::Dynamic,
+        SimObject::Ball, ResponseType::Dynamic,
         { consts::ballRadius, consts::ballRadius, consts::ballRadius });
 
     ctx.get<DynamicEntityType>(ball) = DynamicEntityType::Ball;
@@ -308,7 +308,7 @@ static void resetPersistentEntities(Engine &ctx)
         }
     }
 
-    registerRigidBodyEntity(ctx, ctx.data().ball, SimObject::Sphere);
+    registerRigidBodyEntity(ctx, ctx.data().ball, SimObject::Ball);
 
     placeEntities(ctx);
 }

@@ -44,7 +44,8 @@ enum class SimObject : uint32_t {
     AgentTeam0,
     AgentTeam1,
     Wall,
-    Sphere,
+    NumHulls,
+    Ball = NumHulls,
     Plane,
     NumObjects,
 };

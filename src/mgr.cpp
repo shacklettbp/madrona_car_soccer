@@ -418,7 +418,7 @@ static void loadRenderObjects(render::RenderManager &render_mgr,
 
     render_asset_paths[(size_t)SimObject::Wall] =
         (std::filesystem::path(DATA_DIR) / "wall_render.obj").string();
-    render_asset_paths[(size_t)SimObject::Sphere] =
+    render_asset_paths[(size_t)SimObject::Ball] =
         (std::filesystem::path(DATA_DIR) / "sphere.obj").string();
     render_asset_paths[(size_t)SimObject::Plane] =
         (std::filesystem::path(DATA_DIR) / "plane.obj").string();
@@ -437,8 +437,8 @@ static void loadRenderObjects(render::RenderManager &render_mgr,
     }
 
     auto materials = std::to_array<imp::SourceMaterial>({
-        { math::Vector4::fromVector3(team_colors[0], 0.f), -1, 0.8f, 0.2f },
-        { math::Vector4::fromVector3(team_colors[1], 0.f), -1, 0.8f, 0.2f },
+        { math::Vector4::fromVec3W(team_colors[0], 0.f), -1, 0.8f, 0.2f },
+        { math::Vector4::fromVec3W(team_colors[1], 0.f), -1, 0.8f, 0.2f },
         { render::rgb8ToFloat(191, 108, 10), -1, 0.8f, 0.2f },
         { math::Vector4{0.4f, 0.4f, 0.4f, 0.0f}, -1, 0.8f, 0.2f,},
         { math::Vector4{1.f, 1.f, 1.f, 0.0f}, 1, 0.5f, 1.0f,},
@@ -455,7 +455,7 @@ static void loadRenderObjects(render::RenderManager &render_mgr,
 
     render_assets->objects[(CountT)SimObject::Wall].meshes[0].materialIDX = 3;
 
-    render_assets->objects[(CountT)SimObject::Sphere].meshes[0].materialIDX = 9;
+    render_assets->objects[(CountT)SimObject::Ball].meshes[0].materialIDX = 9;
     render_assets->objects[(CountT)SimObject::Plane].meshes[0].materialIDX = 6;
 
     render_mgr.loadObjects(render_assets->objects, materials, {
@@ -472,17 +472,15 @@ static void loadRenderObjects(render::RenderManager &render_mgr,
 
 static void loadPhysicsObjects(PhysicsLoader &loader)
 {
-    std::array<std::string, (size_t)SimObject::NumObjects - 1> asset_paths;
+    std::array<std::string, (size_t)SimObject::NumHulls> asset_paths;
     asset_paths[(size_t)SimObject::AgentTeam0] =
         (std::filesystem::path(DATA_DIR) / "car_collision.obj").string();
     asset_paths[(size_t)SimObject::AgentTeam1] =
         (std::filesystem::path(DATA_DIR) / "car_collision.obj").string();
     asset_paths[(size_t)SimObject::Wall] =
         (std::filesystem::path(DATA_DIR) / "wall_collision.obj").string();
-    asset_paths[(size_t)SimObject::Sphere] =
-        (std::filesystem::path(DATA_DIR) / "cube_collision.obj").string();
 
-    std::array<const char *, (size_t)SimObject::NumObjects - 1> asset_cstrs;
+    std::array<const char *, (size_t)SimObject::NumHulls> asset_cstrs;
     for (size_t i = 0; i < asset_paths.size(); i++) {
         asset_cstrs[i] = asset_paths[i].c_str();
     }
@@ -542,10 +540,21 @@ static void loadPhysicsObjects(PhysicsLoader &loader)
         .muD = 0.5f,
     });
 
-    setupHull(SimObject::Sphere, 1.f, {
-        .muS = 0.01f,
-        .muD = 0.01f,
-    });
+    SourceCollisionPrimitive ball_prim {
+        .type = CollisionPrimitive::Type::Sphere,
+        .sphere = {
+            .radius = 1.f, // Radius is scaled by consts::ballRadius
+        },
+    };
+
+    src_objs[(CountT)SimObject::Ball] = {
+        .prims = Span<const SourceCollisionPrimitive>(&ball_prim, 1),
+        .invMass = 0.5f,
+        .friction = {
+            .muS = 0.1f,
+            .muD = 0.1f,
+        },
+    };
 
     SourceCollisionPrimitive plane_prim {
         .type = CollisionPrimitive::Type::Plane,
